@@ -1,0 +1,200 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import type { HarnessAdapter, ParsedMessage, ParsedSession, ScannedArtifact } from './types.js'
+import { flattenContent, isDir, mcpServerArtifacts, readJson, readJsonl, safeReaddir, scanAgentFile, scanMcpJson } from './util.js'
+
+/**
+ * Parse a Claude Code transcript (~/.claude/projects/<slug>/<session>.jsonl).
+ * Entry types: user (text or tool_result), assistant (thinking/text/tool_use blocks),
+ * system, plus metadata rows (mode, attachment, file-history-snapshot, ai-title, summary).
+ */
+export function parseClaudeTranscript(file: string): ParsedSession | null {
+  const entries = readJsonl(file)
+  if (entries.length === 0) return null
+
+  let cwd: string | null = null
+  let title: string | null = null
+  let startedAt: string | null = null
+  let endedAt: string | null = null
+  const messages: ParsedMessage[] = []
+
+  const push = (msg: Omit<ParsedMessage, 'raw'>, entry: Record<string, any>) => {
+    messages.push({ ...msg, raw: JSON.stringify(entry) })
+  }
+
+  for (const entry of entries) {
+    cwd ??= typeof entry.cwd === 'string' ? entry.cwd : null
+    const ts = typeof entry.timestamp === 'string' ? entry.timestamp : null
+    if (ts) {
+      if (!startedAt || ts < startedAt) startedAt = ts
+      if (!endedAt || ts > endedAt) endedAt = ts
+    }
+
+    if (entry.type === 'ai-title' && typeof entry.title === 'string') title = entry.title
+    if (entry.type === 'summary' && typeof entry.summary === 'string') title ??= entry.summary
+
+    if (entry.type === 'user' && entry.message) {
+      const content = entry.message.content
+      if (typeof content === 'string') {
+        push({ role: 'user', kind: 'text', content, toolName: null, toolUseId: null, timestamp: ts }, entry)
+      } else if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block?.type === 'tool_result') {
+            push(
+              {
+                role: 'tool',
+                kind: 'tool_result',
+                content: flattenContent(block.content),
+                toolName: null,
+                toolUseId: block.tool_use_id ?? null,
+                timestamp: ts,
+              },
+              entry,
+            )
+          } else if (block?.type === 'text' || typeof block === 'string') {
+            push(
+              { role: 'user', kind: 'text', content: flattenContent([block]), toolName: null, toolUseId: null, timestamp: ts },
+              entry,
+            )
+          }
+        }
+      }
+    } else if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
+      for (const block of entry.message.content) {
+        if (block?.type === 'thinking') {
+          push(
+            { role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts },
+            entry,
+          )
+        } else if (block?.type === 'text') {
+          push(
+            { role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts },
+            entry,
+          )
+        } else if (block?.type === 'tool_use') {
+          push(
+            {
+              role: 'assistant',
+              kind: 'tool_use',
+              content: JSON.stringify(block.input ?? {}),
+              toolName: block.name ?? null,
+              toolUseId: block.id ?? null,
+              timestamp: ts,
+            },
+            entry,
+          )
+        }
+      }
+    } else if (entry.type === 'system') {
+      push(
+        {
+          role: 'system',
+          kind: 'system',
+          content: typeof entry.content === 'string' ? entry.content : entry.subtype ?? null,
+          toolName: null,
+          toolUseId: null,
+          timestamp: ts,
+        },
+        entry,
+      )
+    }
+  }
+
+  if (messages.length === 0) return null
+  // The filename is the canonical session id: resumed/forked sessions embed the
+  // parent's sessionId in early entries, which would collide across files.
+  return {
+    harness: 'claude',
+    externalId: path.basename(file, '.jsonl'),
+    sourcePath: file,
+    projectPath: cwd,
+    title,
+    startedAt,
+    endedAt,
+    messages,
+  }
+}
+
+/** Whether one path equals or contains the other. */
+function pathsRelated(a: string, b: string): boolean {
+  const na = path.resolve(a)
+  const nb = path.resolve(b)
+  return na === nb || na.startsWith(nb + path.sep) || nb.startsWith(na + path.sep)
+}
+
+/** MCP servers registered at Claude Code's local scope (~/.claude.json) for this project. */
+function claudeLocalServers(root: string): Record<string, unknown> {
+  const config = readJson(path.join(os.homedir(), '.claude.json'))
+  const projects = (config?.projects ?? {}) as Record<string, { mcpServers?: Record<string, unknown> }>
+  const servers: Record<string, unknown> = {}
+  for (const [projectPath, entry] of Object.entries(projects)) {
+    if (!pathsRelated(projectPath, root)) continue
+    Object.assign(servers, entry.mcpServers ?? {})
+  }
+  return servers
+}
+
+export const claude: HarnessAdapter = {
+  id: 'claude',
+  label: 'Claude Code',
+  projectMcpConfigPath: '.mcp.json',
+
+  // ~/.claude/projects/<project-slug>/<session-uuid>.jsonl
+  discoverSessionFiles(home) {
+    const projects = path.join(home, '.claude', 'projects')
+    const out: string[] = []
+    for (const dir of safeReaddir(projects)) {
+      const abs = path.join(projects, dir)
+      if (!isDir(abs)) continue
+      for (const file of safeReaddir(abs)) {
+        if (file.endsWith('.jsonl')) out.push(path.join(abs, file))
+      }
+    }
+    return out
+  },
+
+  parseSession: parseClaudeTranscript,
+
+  scanProjectArtifacts(root) {
+    const out: ScannedArtifact[] = []
+
+    const agentMd = scanAgentFile(root, 'CLAUDE.md', 'claude')
+    if (agentMd) out.push(agentMd)
+
+    const skillsDir = path.join(root, '.claude', 'skills')
+    if (fs.existsSync(skillsDir)) {
+      for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        const skillMd = path.join(skillsDir, entry.name, 'SKILL.md')
+        if (fs.existsSync(skillMd)) {
+          out.push({
+            type: 'skill',
+            name: entry.name,
+            relPath: path.posix.join('.claude', 'skills', entry.name, 'SKILL.md'),
+            harness: 'claude',
+            content: fs.readFileSync(skillMd, 'utf8'),
+          })
+        }
+      }
+    }
+
+    out.push(...scanMcpJson(path.join(root, '.mcp.json'), '.mcp.json', 'claude'))
+
+    // Claude Code "local" scope servers live in ~/.claude.json keyed by the directory the
+    // session was launched from, which may be the repo root or an ancestor/descendant of it.
+    // Synced back as .mcp.json entries, which promotes them to shareable project scope.
+    const claimed = new Set(out.filter((a) => a.type === 'mcp_server').map((a) => a.name))
+    for (const a of mcpServerArtifacts('claude', '.mcp.json', claudeLocalServers(root))) {
+      if (!claimed.has(a.name)) out.push(a)
+    }
+
+    return out
+  },
+
+  scanGlobalArtifacts(home) {
+    const config = readJson(path.join(home, '.claude.json'))
+    if (!config) return []
+    return mcpServerArtifacts('claude', '~/.claude.json', (config.mcpServers ?? {}) as Record<string, unknown>)
+  },
+}

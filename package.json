@@ -1,0 +1,66 @@
+{
+  "name": "daiko",
+  "version": "0.1.0",
+  "description": "Sync your MCP servers, skills, and AGENT.md across agents and projects. Harness agnostic, versioned, self hosted.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ronxjansen/daiko.git"
+  },
+  "homepage": "https://github.com/ronxjansen/daiko#readme",
+  "bugs": {
+    "url": "https://github.com/ronxjansen/daiko/issues"
+  },
+  "keywords": [
+    "mcp",
+    "agents",
+    "skills",
+    "claude",
+    "sync",
+    "cli",
+    "ai"
+  ],
+  "bin": {
+    "dai": "bin/dai.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "web/dist"
+  ],
+  "workspaces": [
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build:server && npm run build:web",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky",
+    "build:server": "tsc -p tsconfig.json",
+    "build:web": "npm run build -w web",
+    "install:global": "npm run build && npm install -g .",
+    "uninstall:global": "npm uninstall -g daiko",
+    "dev:web": "npm run dev -w web",
+    "dev": "tsx src/cli/index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^13.0.3",
+    "commander": "^13.1.0",
+    "hono": "^4.6.16",
+    "kysely": "^0.27.5",
+    "smol-toml": "^1.8.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "husky": "^9.1.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

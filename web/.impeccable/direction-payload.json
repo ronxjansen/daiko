@@ -1,0 +1,49 @@
+{
+  "title": "Choose the visual world for the Daiko webui",
+  "question": "The roll assigned The Inspector. Keep it, take an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "The Inspector",
+      "kicker": "THE ROLL",
+      "lineage": "DOS-era file managers & database browsers (Norton Commander, Turbo Vision), modernized",
+      "thesis": "Your agents' shared brain is one SQLite file on your machine — the UI is that file made visible, dressed as the file-manager grammar developers already trust.",
+      "palette": ["#101C4A", "#DCE4F7", "#2BC7C7", "#FFB454"],
+      "materials": ["cobalt working field", "box-drawn 1px rules", "inverse-video selection", "tabular mono"],
+      "viewport": "A full-bleed cobalt field. Top strip: DAIKO left, the literal db path ~/.daiko/daiko.db center, store size right. Below, panels framed by fine rules with titles set into the border — STORE counts as a ruled table row, RECENT ACTIVITY as true rows with hashes; hovering runs a cyan inverse-video selection bar across them. A fixed bottom key-bar names real commands.",
+      "risk": "Retro pastiche can tire or hurt legibility if played as costume; the cobalt field commits the whole surface — this is a loud calm, not a neutral one. Mitigated by modern type scale, generous spacing, and restrained ornament."
+    },
+    {
+      "id": "challenger-plate-section",
+      "label": "Design Annual Plate Section",
+      "lineage": "print annuals: registration crosshairs, hairlines, letterpress stamp",
+      "thesis": "Artifacts as printed plates on near-white stock; every save is a new edition in the credits row.",
+      "case": "Fuses cleanly and carries the calm — but a print-annual identifies designers, not terminal-native developers; loses on audience identification.",
+      "hero": "https://impeccable.style/worlds/cards/design-annual-s-plate-section-hero.webp"
+    },
+    {
+      "id": "challenger-exposure-record",
+      "label": "Darkroom Exposure Record",
+      "lineage": "printer's zone-system record cards under the enlarger",
+      "thesis": "Versions as exposure records: translucent sheets, hatch densities, stop-deltas for diffs.",
+      "case": "The annotation grammar is seductive for version history, but hatches and stop-deltas map obliquely to sync/pin — loses on product clarity.",
+      "hero": "https://impeccable.style/worlds/cards/operate-b-exposure-record-zone-sheets-hero.webp"
+    },
+    {
+      "id": "challenger-cyclorama",
+      "label": "Cyclorama Dawn",
+      "lineage": "stage lighting: cue stacks on an infinite horizon",
+      "thesis": "Version history as a lighting cue stack — scrub from first light (v1) to day (current).",
+      "case": "The scrubbable cue timeline is a genuinely good version-history idea, but the atmospheric world fuses poorly with tables of artifacts — loses both axes.",
+      "hero": "https://impeccable.style/worlds/cards/stagecraft-theater-lighting-cyclorama-dawn-hero.webp"
+    }
+  ],
+  "reroll": true,
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "The polished dark developer dashboard — neutral near-black, one blue accent, rounded cards — executed at full craft.",
+    "viewport": "Sidebar, stat cards, tables; what the current UI reaches for, finished impeccably."
+  },
+  "steer": true
+}
