@@ -1,5 +1,8 @@
 {
-  "name": "daiko",
+  "name": "@ronxjansen/daiko",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.1.0",
   "description": "Sync your MCP servers, skills, and AGENT.md across agents and projects. Harness agnostic, versioned, self hosted.",
   "type": "module",

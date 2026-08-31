@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { HarnessAdapter, ParsedMessage, ParsedSession, ScannedArtifact } from './types.js'
-import { flattenContent, isDir, mcpServerArtifacts, readJson, readJsonl, safeReaddir, scanAgentFile, scanMcpJson } from './util.js'
+import { flattenContent, isDir, mcpServerArtifacts, readJson, readJsonl, removeMcpServerFromJsonFile, safeReaddir, scanAgentFile, scanMcpJson } from './util.js'
 
 /**
  * Parse a Claude Code transcript (~/.claude/projects/<slug>/<session>.jsonl).
@@ -196,5 +196,9 @@ export const claude: HarnessAdapter = {
     const config = readJson(path.join(home, '.claude.json'))
     if (!config) return []
     return mcpServerArtifacts('claude', '~/.claude.json', (config.mcpServers ?? {}) as Record<string, unknown>)
+  },
+
+  removeGlobalMcpServer(home, name) {
+    return removeMcpServerFromJsonFile(path.join(home, '.claude.json'), name)
   },
 }

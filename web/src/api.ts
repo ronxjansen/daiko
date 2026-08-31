@@ -170,7 +170,14 @@ export const api = {
     request<{ ok: true }>(`/api/artifacts/${id}/pin`, { method: 'POST', body: JSON.stringify({ version_id: versionId }) }),
   restoreVersion: (id: string, versionId: string) =>
     request<{ ok: true }>(`/api/artifacts/${id}/restore`, { method: 'POST', body: JSON.stringify({ version_id: versionId }) }),
-  deleteArtifact: (id: string) => request<{ ok: true }>(`/api/artifacts/${id}`, { method: 'DELETE' }),
+  deleteArtifact: (id: string) =>
+    request<{
+      ok: true
+      deleted: { type: ArtifactType; name: string }
+      /** Set when a global MCP server was removed from its harness config file. */
+      global: { file: string; status: 'removed' | 'absent' } | null
+      detached: Array<{ project: string; removed: string[] }>
+    }>(`/api/artifacts/${id}`, { method: 'DELETE' }),
   sessions: (opts: { harness?: SessionHarness; limit?: number; offset?: number } = {}) => {
     const params = new URLSearchParams()
     if (opts.harness) params.set('harness', opts.harness)

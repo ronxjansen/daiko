@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { openDb } from '../db/index.js'
 import { daikoHome, dbPath, ensureHome, readConfig, writeConfig, DEFAULT_PORT } from '../core/paths.js'
-import { addGlobalMcpServers, addProject, attachArtifact, detachArtifact, syncProject } from '../core/store.js'
+import { addGlobalMcpServers, addProject, attachArtifact, deleteArtifact, detachArtifact, syncProject } from '../core/store.js'
 import { sessionHarnesses } from '../core/harnesses/index.js'
 import { importAllSessions, importSessionFile } from '../core/sessions.js'
 import { installHook } from './hook.js'
@@ -213,6 +213,36 @@ program
       const result = await detachArtifact(db, project.id, matches[0].id)
       console.log(`Detached ${matches[0].type} "${matches[0].name}" from ${project.name}`)
       for (const file of result.removed) console.log(`removed ${file}`)
+    } finally {
+      await db.destroy()
+    }
+  })
+
+program
+  .command('delete <name>')
+  .description('Delete a stored artifact everywhere: harness global config, attached repos, and the store')
+  .option('-t, --type <type>', 'disambiguate: skill | mcp_server | agent_md')
+  .action(async (name: string, opts: { type?: string }) => {
+    const db = openDb(dbPath())
+    try {
+      const matches = await findArtifacts(db, name, opts.type)
+      if (matches.length === 0) {
+        console.error(`No artifact matching "${name}". Try: dai search ${name}`)
+        process.exitCode = 1
+        return
+      }
+      if (matches.length > 1) {
+        console.error(`"${name}" is ambiguous; use the exact name (and --type):`)
+        for (const a of matches) console.error(`  ${describeArtifact(a)}`)
+        process.exitCode = 1
+        return
+      }
+      const summary = await deleteArtifact(db, matches[0].id)
+      console.log(`Deleted ${summary.deleted.type} "${summary.deleted.name}"`)
+      if (summary.global?.status === 'removed') console.log(`removed from ${summary.global.file}`)
+      for (const d of summary.detached) {
+        for (const file of d.removed) console.log(`removed ${file} (${d.project})`)
+      }
     } finally {
       await db.destroy()
     }

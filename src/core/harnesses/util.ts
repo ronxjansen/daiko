@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ScannedArtifact } from './types.js'
+import type { GlobalRemoveResult, ScannedArtifact } from './types.js'
 
 export function readJsonl(file: string): Array<Record<string, any>> {
   const out: Array<Record<string, any>> = []
@@ -89,4 +89,32 @@ export function scanMcpJson(file: string, relPath: string, harness: string): Sca
   const parsed = readJson(file)
   if (!parsed) return []
   return mcpServerArtifacts(harness, relPath, (parsed.mcpServers ?? {}) as Record<string, unknown>)
+}
+
+/** Write via a temp file + rename so a crash mid-write can never truncate a config file. */
+export function writeFileAtomic(file: string, content: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`)
+  fs.writeFileSync(tmp, content)
+  fs.renameSync(tmp, file)
+}
+
+/**
+ * Remove one entry from a JSON config's top-level mcpServers map, preserving every other
+ * key in the file. Refuses to touch a file that does not parse: these configs (notably
+ * ~/.claude.json) hold unrelated harness state we must never clobber.
+ */
+export function removeMcpServerFromJsonFile(file: string, name: string): GlobalRemoveResult {
+  if (!fs.existsSync(file)) return { status: 'absent', file }
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (err) {
+    return { status: 'failed', file, reason: `invalid JSON: ${err instanceof Error ? err.message : err}` }
+  }
+  const servers = (parsed.mcpServers ?? {}) as Record<string, unknown>
+  if (!(name in servers)) return { status: 'absent', file }
+  delete servers[name]
+  writeFileAtomic(file, JSON.stringify({ ...parsed, mcpServers: servers }, null, 2) + '\n')
+  return { status: 'removed', file }
 }

@@ -49,6 +49,7 @@ export function ArtifactDetail() {
   const remove = useMutation({
     mutationFn: () => api.deleteArtifact(artifactId),
     onSuccess: () => navigate({ to: '/' }),
+    onError: (err: Error) => setShareMessage(`Delete failed: ${err.message}`),
   })
   const attach = useMutation({
     mutationFn: (projectId: string) => api.attachArtifact(projectId, artifactId),
@@ -111,7 +112,11 @@ export function ArtifactDetail() {
             <button
               className="btn btn-danger"
               onClick={() => {
-                if (confirm(`Delete "${a.name}" and all its versions?`)) remove.mutate()
+                const globalNote =
+                  !a.project_id && a.type === 'mcp_server'
+                    ? ` This also removes it from the ${a.harness} global config (${a.rel_path}).`
+                    : ''
+                if (confirm(`Delete "${a.name}" and all its versions?${globalNote}`)) remove.mutate()
               }}
             >
               Delete

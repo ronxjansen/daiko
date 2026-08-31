@@ -7,7 +7,7 @@ import { Hono } from 'hono'
 import type { Kysely } from 'kysely'
 import type { DB } from '../db/schema.js'
 import { HARNESSES } from '../core/harnesses/index.js'
-import { attachArtifact, detachArtifact, hashOf, syncProject } from '../core/store.js'
+import { attachArtifact, deleteArtifact, detachArtifact, hashOf, syncProject } from '../core/store.js'
 
 const now = () => new Date().toISOString()
 
@@ -276,8 +276,13 @@ export function createApp(db: Kysely<DB>): Hono {
   })
 
   app.delete('/api/artifacts/:id', async (c) => {
-    await db.deleteFrom('artifacts').where('id', '=', c.req.param('id')).execute()
-    return c.json({ ok: true })
+    try {
+      const summary = await deleteArtifact(db, c.req.param('id'))
+      return c.json({ ok: true, ...summary })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return c.json({ error: message }, message === 'artifact not found' ? 404 : 409)
+    }
   })
 
   app.get('/api/sessions', async (c) => {

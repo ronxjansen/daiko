@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import type { Kysely } from 'kysely'
 import type { ArtifactsTable, DB } from '../db/schema.js'
 import { harnessById } from './harnesses/index.js'
+import { writeFileAtomic } from './harnesses/util.js'
 import { scanGlobalMcpServers, scanProject, type ScannedArtifact } from './scan.js'
 
 const now = () => new Date().toISOString()
@@ -239,26 +241,31 @@ export async function detachArtifact(db: Kysely<DB>, projectId: string, artifact
     .where('artifact_id', '=', artifact.id)
     .execute()
 
+  if (!fs.existsSync(project.root_path)) return { removed: [] }
+  return { removed: removeFromProjectTree(project.root_path, artifact) }
+}
+
+/** Delete an artifact's synced copy from a project working tree. Returns removed rel paths. */
+function removeFromProjectTree(root: string, artifact: Pick<ArtifactsTable, 'type' | 'name' | 'rel_path' | 'harness'>): string[] {
   const removed: string[] = []
-  if (!fs.existsSync(project.root_path)) return { removed }
   const relPath = projectRelPath(artifact)
 
   if (artifact.type === 'skill') {
     // Remove the whole skill directory, not just SKILL.md.
-    const dir = path.join(project.root_path, path.dirname(relPath))
+    const dir = path.join(root, path.dirname(relPath))
     if (fs.existsSync(dir)) {
       fs.rmSync(dir, { recursive: true, force: true })
       removed.push(path.dirname(relPath))
     }
   } else if (artifact.type === 'mcp_server') {
-    const target = path.join(project.root_path, relPath)
+    const target = path.join(root, relPath)
     if (fs.existsSync(target)) {
       try {
         const parsed = JSON.parse(fs.readFileSync(target, 'utf8'))
         const servers = (parsed.mcpServers ?? {}) as Record<string, unknown>
         if (artifact.name in servers) {
           delete servers[artifact.name]
-          fs.writeFileSync(target, JSON.stringify({ ...parsed, mcpServers: servers }, null, 2) + '\n')
+          writeFileAtomic(target, JSON.stringify({ ...parsed, mcpServers: servers }, null, 2) + '\n')
           removed.push(relPath)
         }
       } catch {
@@ -266,12 +273,64 @@ export async function detachArtifact(db: Kysely<DB>, projectId: string, artifact
       }
     }
   } else {
-    const target = path.join(project.root_path, relPath)
+    const target = path.join(root, relPath)
     if (fs.existsSync(target)) {
       fs.rmSync(target)
       removed.push(relPath)
     }
   }
 
-  return { removed }
+  return removed
+}
+
+export interface DeleteSummary {
+  deleted: { type: string; name: string }
+  /** Set when the artifact was a global MCP server and its harness config was edited. */
+  global: { file: string; status: 'removed' | 'absent' } | null
+  detached: Array<{ project: string; removed: string[] }>
+}
+
+/**
+ * Delete an artifact everywhere it is materialized: the entry in its harness's global
+ * config (so the next scan cannot resurrect it), the synced copies in attached project
+ * trees, and finally the DB row (versions and project links cascade). A failed global
+ * config edit aborts the whole delete — the store must never report an artifact gone
+ * while the harness still loads it.
+ */
+export async function deleteArtifact(db: Kysely<DB>, artifactId: string, home = os.homedir()): Promise<DeleteSummary> {
+  const artifact = await db
+    .selectFrom('artifacts')
+    .selectAll()
+    .where('id', '=', artifactId)
+    .executeTakeFirstOrThrow(() => new Error('artifact not found'))
+
+  let global: DeleteSummary['global'] = null
+  if (artifact.project_id === null && artifact.type === 'mcp_server' && artifact.rel_path.startsWith('~')) {
+    const harness = harnessById(artifact.harness)
+    if (harness?.removeGlobalMcpServer) {
+      const result = harness.removeGlobalMcpServer(home, artifact.name)
+      if (result.status === 'failed') {
+        throw new Error(
+          `not deleted: could not remove "${artifact.name}" from ${result.file} (${result.reason}); fix that file or remove the entry manually, then retry`,
+        )
+      }
+      global = { file: result.file, status: result.status }
+    }
+  }
+
+  const attached = await db
+    .selectFrom('project_artifacts')
+    .innerJoin('projects', 'projects.id', 'project_artifacts.project_id')
+    .select(['projects.name', 'projects.root_path'])
+    .where('project_artifacts.artifact_id', '=', artifact.id)
+    .execute()
+  const detached: DeleteSummary['detached'] = []
+  for (const p of attached) {
+    if (!fs.existsSync(p.root_path)) continue
+    const removed = removeFromProjectTree(p.root_path, artifact)
+    if (removed.length > 0) detached.push({ project: p.name, removed })
+  }
+
+  await db.deleteFrom('artifacts').where('id', '=', artifact.id).execute()
+  return { deleted: { type: artifact.type, name: artifact.name }, global, detached }
 }

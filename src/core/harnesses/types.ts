@@ -30,6 +30,18 @@ export interface ScannedArtifact {
 }
 
 /**
+ * Outcome of removing an entry from a harness-global config file.
+ * 'absent' means the entry (or the file) was already gone — safe to proceed.
+ * 'failed' means the file exists but could not be edited safely (e.g. invalid
+ * JSON/TOML); callers must not pretend the entry is gone.
+ */
+export interface GlobalRemoveResult {
+  status: 'removed' | 'absent' | 'failed'
+  file: string
+  reason?: string
+}
+
+/**
  * One coding harness (Claude Code, Codex, Cursor, ...). All harness-specific knowledge —
  * where session transcripts and config files live and how to parse them — belongs in an
  * adapter; core scan/import/sync logic only ever iterates the registry. Every capability
@@ -48,6 +60,8 @@ export interface HarnessAdapter {
   scanProjectArtifacts?(root: string): ScannedArtifact[]
   /** MCP servers from harness-wide configs (stored globally, available to every project). */
   scanGlobalArtifacts?(home: string): ScannedArtifact[]
+  /** Remove a globally registered MCP server from this harness's global config file. */
+  removeGlobalMcpServer?(home: string, name: string): GlobalRemoveResult
   /** Project config file that a global-origin MCP server is written to on sync. */
   projectMcpConfigPath?: string
 }
