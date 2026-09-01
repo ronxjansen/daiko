@@ -1,5 +1,9 @@
 # Daiko
 
+[![npm version](https://img.shields.io/npm/v/@ronxjansen/daiko.svg)](https://www.npmjs.com/package/@ronxjansen/daiko)
+[![CI](https://github.com/ronxjansen/daiko/actions/workflows/ci.yml/badge.svg)](https://github.com/ronxjansen/daiko/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/@ronxjansen/daiko.svg)](https://github.com/ronxjansen/daiko/blob/master/LICENSE)
+
 Sync your MCP servers, skills, AGENT.md and more across agents and projects. Harness agnostic, versioned, local-first and secure. Configure a hook into your agent harness (`dai hook`) and it will automatically sync skills and MCP servers files into your project. 
 
 ## Getting started
