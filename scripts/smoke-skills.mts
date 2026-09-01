@@ -43,10 +43,11 @@ const db = openDb(path.join(tmp, 'daiko.sqlite'))
 
 try {
   // 1. Scanning: every harness contributes its skills, with sibling files attached.
+  // Goose shares the .agents/skills location with Generic, so 'ag' scans under both.
   const scanned = scanProject(source).filter((a) => a.type === 'skill')
   assert.deepStrictEqual(
     scanned.map((a) => `${a.harness}:${a.name}`).sort(),
-    ['claude:demo', 'codex:cx', 'cursor:cu', 'generic:ag'],
+    ['claude:demo', 'codex:cx', 'cursor:cu', 'generic:ag', 'goose:ag'],
     'expected one skill per harness',
   )
   const demo = scanned.find((a) => a.name === 'demo')!

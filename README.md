@@ -54,6 +54,11 @@ it keeps the stored version and tells you which copies disagree.
 | Codex | `AGENTS.md` | `.codex/skills` | — (global `~/.codex/config.toml` only) |
 | Cursor | `.cursorrules` | `.cursor/skills` | `.cursor/mcp.json` |
 | Gemini | `GEMINI.md` | — | — |
+| Goose | `AGENTS.md` (reads `.goosehints`) | `.agents/skills` | — (global `~/.config/goose/config.yaml` only) |
+| Kilo Code | `AGENTS.md` | `.kilocode/skills` | `.kilocode/mcp.json` |
+| opencode | `AGENTS.md` | `.opencode/skills` | — (`opencode.json` uses its own shape) |
+| Pi | `AGENTS.md` | `.pi/skills` | — (no MCP by design) |
+| Hermes | `AGENTS.md` (reads `HERMES.md`) | — (global `~/.hermes/skills` only) | — (global `~/.hermes/config.yaml` only) |
 | Generic | `AGENTS.md` | `.agents/skills` | — |
 
 A dash means Daiko has nowhere to put that artifact type for that harness. It says so when
@@ -68,7 +73,11 @@ you sync rather than writing it into some other harness's config file.
 
 ```bash
 npm i -g daiko
-dai init          # initialize the global store (~/.daiko)
+dai init          # onboard this machine: detect installed harnesses, import all sessions, discover every
+                  # repo they were used in (from harness global state — no disk crawl), scan + upload each
+                  # repo's config, and optionally install hooks. Interactive with sensible defaults; rerun-safe.
+dai init -y       # same, accepting the defaults (import + scan everything, no hooks)
+dai init --hooks global --no-sessions --harness claude codex  # flag-driven, for scripts
 dai add .         # upload all skills, MCP servers, agent files for the repo (uses repo dir name as project name)
 dai sync          # write skills, MCP servers and agent files from the central store back into the repo
                   # (local edits that were never added are reported and left alone)
@@ -80,7 +89,7 @@ dai detach <name> # remove a shared skill/MCP server from this repo (unlink + de
 dai hook          # install hooks for every detected harness (Claude Code, Codex, Cursor, Gemini): auto "dai sync" on session start + transcript capture
 dai hook -g       # same, globally (~/.claude, ~/.codex, ~/.cursor, ~/.gemini): every new session in a registered repo auto-syncs
 dai hook --harness codex  # limit to specific harnesses
-dai import        # import locally stored sessions from Claude Code, Codex, and Gemini CLI
+dai import        # import locally stored sessions from Claude Code, Codex, Gemini CLI, Goose, Pi, and Hermes
 dai sessions      # list captured sessions
 dai list          # list registered projects and artifacts
 dai webui         # manage everything in a web app (http://localhost:4680)

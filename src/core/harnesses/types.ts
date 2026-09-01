@@ -107,6 +107,18 @@ export interface GlobalRemoveResult {
 }
 
 /**
+ * One session read out of a harness's shared database store, for harnesses that keep many
+ * sessions in a single SQLite file (goose ≥1.10, Hermes) instead of one transcript file
+ * each. `sourcePath` must be unique and stable across imports ('<db-path>#<session-id>');
+ * `mtimeMs` and `size` stand in for the file stat that drives change detection on
+ * file-backed sessions — any monotonic pair works (last-update time + message count).
+ */
+export interface DbSession extends ParsedSession {
+  mtimeMs: number
+  size: number
+}
+
+/**
  * One coding harness (Claude Code, Codex, Cursor, ...). All harness-specific knowledge —
  * where session transcripts and config files live and how to parse them — belongs in an
  * adapter; core scan/import/sync logic only ever iterates the registry. Every capability
@@ -117,12 +129,22 @@ export interface HarnessAdapter {
   id: string
   /** Human-readable name shown in the CLI and web UI. */
   label: string
+  /** Global config dir under $HOME, e.g. '.claude'. Its presence is the "installed on this machine" signal. */
+  globalConfigDir?: string
+  /**
+   * Absolute roots of every project this harness has been used in, read from its own global
+   * state (config project maps, workspace storage) — never from walking the disk. Paths may
+   * be stale or point below a repo root; core discovery (src/core/discover.ts) cleans that up.
+   */
+  discoverProjects?(home: string): string[]
   /** Where this harness keeps project config. Drives scanning and rendering alike; omit for session-only harnesses. */
   layout?: HarnessLayout
   /** Absolute paths of session transcript files in this harness's local store. */
   discoverSessionFiles?(home: string): string[]
   /** Parse one transcript file into the normalized shape; null = empty or metadata-only. */
   parseSession?(file: string): ParsedSession | null
+  /** Every session in this harness's shared database store; complements or replaces the per-file pair above. */
+  discoverDbSessions?(home: string): DbSession[]
   /** Project artifacts beyond the declared layout (e.g. Claude's local-scope MCP servers in ~/.claude.json). */
   scanExtraProjectArtifacts?(root: string): ScannedArtifact[]
   /** MCP servers from harness-wide configs (stored globally, available to every project). */

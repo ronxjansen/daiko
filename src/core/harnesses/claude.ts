@@ -138,7 +138,14 @@ function claudeLocalServers(root: string): Record<string, unknown> {
 export const claude: HarnessAdapter = {
   id: 'claude',
   label: 'Claude Code',
+  globalConfigDir: '.claude',
   layout: { agentFile: 'CLAUDE.md', skillsDir: '.claude/skills', mcpConfig: '.mcp.json' },
+
+  // ~/.claude.json keeps a projects map keyed by every directory Claude Code was launched from.
+  discoverProjects(home) {
+    const config = readJson(path.join(home, '.claude.json'))
+    return Object.keys((config?.projects ?? {}) as Record<string, unknown>)
+  },
 
   // ~/.claude/projects/<project-slug>/<session-uuid>.jsonl
   discoverSessionFiles(home) {

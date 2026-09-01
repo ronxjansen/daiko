@@ -1,25 +1,50 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, formatCost, formatTokens, timeAgo, harnessLabel, type SessionHarness } from '../api'
 import { HarnessIcon, HarnessMark } from '../components/HarnessIcon'
 
 const PAGE_SIZE = 50
 
+/** Debounce keystrokes so each pause yields one server query, not one per key. */
+function useDebounced<T>(value: T, ms = 250): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return debounced
+}
+
 export function Sessions() {
   const [harness, setHarness] = useState<SessionHarness | undefined>(undefined)
+  const [project, setProject] = useState<string | undefined>(undefined)
+  const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
+  const q = useDebounced(search.trim())
   const harnesses = useQuery({ queryKey: ['harnesses'], queryFn: api.harnesses })
+  const projects = useQuery({ queryKey: ['session-projects'], queryFn: api.sessionProjects })
   const sessions = useQuery({
-    queryKey: ['sessions', harness ?? 'all', page],
-    queryFn: () => api.sessions({ harness, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    queryKey: ['sessions', harness ?? 'all', project ?? 'all', q, page],
+    queryFn: () => api.sessions({ harness, project, q, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    placeholderData: (prev) => prev,
   })
 
   const total = sessions.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const filtered = Boolean(q || harness || project)
 
+  // Any filter change restarts pagination from the first page of the new result set.
   const pickHarness = (h: SessionHarness | undefined) => {
     setHarness(h)
+    setPage(0)
+  }
+  const pickProject = (p: string | undefined) => {
+    setProject(p)
+    setPage(0)
+  }
+  const pickSearch = (s: string) => {
+    setSearch(s)
     setPage(0)
   }
 
@@ -52,6 +77,27 @@ export function Sessions() {
             ))}
           </div>
         </div>
+        <div className="filter-bar">
+          <input
+            type="search"
+            className="search-input"
+            placeholder="Search sessions… (all keywords must match)"
+            value={search}
+            onChange={(e) => pickSearch(e.target.value)}
+          />
+          <select
+            className="filter-select"
+            value={project ?? ''}
+            onChange={(e) => pickProject(e.target.value || undefined)}
+          >
+            <option value="">All projects</option>
+            {projects.data?.map((p) => (
+              <option key={p} value={p}>
+                {shortenPath(p)}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
 
       {sessions.isError && (
@@ -62,13 +108,19 @@ export function Sessions() {
         </p>
       )}
 
-      {sessions.data?.sessions.length === 0 && (
-        <p className="empty">
-          <span>
-            No sessions yet. Run <code>dai import</code> to backfill, or <code>dai hook</code> to capture live sessions.
-          </span>
-        </p>
-      )}
+      {sessions.data?.sessions.length === 0 &&
+        (filtered ? (
+          <p className="empty">
+            <span>No sessions match.</span>
+          </p>
+        ) : (
+          <p className="empty">
+            <span>
+              No sessions yet. Run <code>dai import</code> to backfill, or <code>dai hook</code> to capture live
+              sessions.
+            </span>
+          </p>
+        ))}
 
       <table className="table">
         <thead>

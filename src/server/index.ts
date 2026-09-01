@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
-import type { Kysely } from 'kysely'
+import type { ExpressionBuilder, Kysely } from 'kysely'
 import type { DB } from '../db/schema.js'
 import { HARNESSES } from '../core/harnesses/index.js'
 import { harnessesSupporting, renderPaths, supportMatrix } from '../core/render.js'
@@ -83,20 +83,29 @@ export function createApp(db: Kysely<DB>): Hono {
   )
 
   app.get('/api/stats', async (c) => {
-    const [projects, artifacts, versions, sessions] = await Promise.all([
+    const [projects, artifacts, versions, sessions, tokens] = await Promise.all([
       db.selectFrom('projects').select(db.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
       db.selectFrom('artifacts').select(['type', db.fn.countAll<number>().as('n')]).groupBy('type').execute(),
       db.selectFrom('versions').select(db.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
       db.selectFrom('sessions').select(db.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
+      db
+        .selectFrom('sessions')
+        .select(({ fn }) => [
+          fn.sum<number | null>('input_tokens').as('input'),
+          fn.sum<number | null>('output_tokens').as('output'),
+          fn.sum<number | null>('cache_read_tokens').as('cache_read'),
+          fn.sum<number | null>('cache_write_tokens').as('cache_write'),
+        ])
+        .executeTakeFirstOrThrow(),
     ])
     const byType = Object.fromEntries(artifacts.map((r) => [r.type, r.n]))
     return c.json({
       projects: projects.n,
       skills: byType.skill ?? 0,
       mcp_servers: byType.mcp_server ?? 0,
-      agent_files: byType.agent_md ?? 0,
       versions: versions.n,
       sessions: sessions.n,
+      total_tokens: (tokens.input ?? 0) + (tokens.output ?? 0) + (tokens.cache_read ?? 0) + (tokens.cache_write ?? 0),
     })
   })
 
@@ -428,6 +437,8 @@ export function createApp(db: Kysely<DB>): Hono {
 
   app.get('/api/sessions', async (c) => {
     const harness = c.req.query('harness')
+    const project = c.req.query('project')
+    const keywords = (c.req.query('q') ?? '').split(/\s+/).filter(Boolean)
     const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
     const offset = Number(c.req.query('offset')) || 0
 
@@ -455,6 +466,31 @@ export function createApp(db: Kysely<DB>): Hono {
       query = query.where('harness', '=', harness)
       countQuery = countQuery.where('harness', '=', harness)
     }
+    if (project) {
+      query = query.where('project_path', '=', project)
+      countQuery = countQuery.where('project_path', '=', project)
+    }
+    // Every keyword must appear somewhere in the session: title, id, project
+    // path, or any message body. Applied to the count query too so pagination
+    // totals reflect the filtered set.
+    for (const kw of keywords) {
+      const like = `%${kw}%`
+      const matches = (eb: ExpressionBuilder<DB, 'sessions'>) =>
+        eb.or([
+          eb('sessions.title', 'like', like),
+          eb('sessions.external_id', 'like', like),
+          eb('sessions.project_path', 'like', like),
+          eb.exists(
+            eb
+              .selectFrom('messages')
+              .select('messages.id')
+              .whereRef('messages.session_id', '=', 'sessions.id')
+              .where('messages.content', 'like', like),
+          ),
+        ])
+      query = query.where(matches)
+      countQuery = countQuery.where(matches)
+    }
     const [rows, total] = await Promise.all([query.execute(), countQuery.executeTakeFirstOrThrow()])
     return c.json({
       sessions: rows.map((s) => ({ ...s, ...usageFields(s), preview: s.preview ? s.preview.slice(0, 200) : null })),
@@ -467,6 +503,117 @@ export function createApp(db: Kysely<DB>): Hono {
   app.get('/api/sessions/starts', async (c) => {
     const rows = await db.selectFrom('sessions').select('started_at').where('started_at', 'is not', null).execute()
     return c.json(rows.map((r) => r.started_at))
+  })
+
+  // Hourly token-usage buckets per harness over the trailing 30 days, keyed by
+  // UTC epoch ms so the dashboard can re-bucket hours into viewer-local days.
+  app.get('/api/sessions/usage', async (c) => {
+    const cutoffMs = Date.now() - 30 * 24 * 3_600_000
+    const cutoffIso = new Date(cutoffMs).toISOString()
+    const perMessage = await db
+      .selectFrom('messages')
+      .innerJoin('sessions', 'sessions.id', 'messages.session_id')
+      .select([
+        'messages.timestamp as ts',
+        'sessions.harness as harness',
+        'messages.input_tokens as input_tokens',
+        'messages.output_tokens as output_tokens',
+        'messages.cache_read_tokens as cache_read_tokens',
+        'messages.cache_write_tokens as cache_write_tokens',
+      ])
+      .where('messages.input_tokens', 'is not', null)
+      .where('messages.timestamp', '>=', cutoffIso)
+      .execute()
+    // Some harnesses (Codex) report only session-cumulative usage, so no message
+    // carries tokens; attribute those sessions' totals to the hour they ended.
+    const sessionOnly = await db
+      .selectFrom('sessions')
+      .select(['harness', 'started_at', 'ended_at', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens'])
+      .where('input_tokens', 'is not', null)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('messages')
+              .select('messages.id')
+              .whereRef('messages.session_id', '=', 'sessions.id')
+              .where('messages.input_tokens', 'is not', null),
+          ),
+        ),
+      )
+      .execute()
+    const buckets = new Map<string, number>()
+    const add = (
+      ts: string | null,
+      harness: string,
+      u: { input_tokens: number | null; output_tokens: number | null; cache_read_tokens: number | null; cache_write_tokens: number | null },
+    ) => {
+      const ms = ts ? Date.parse(ts) : NaN
+      if (Number.isNaN(ms) || ms < cutoffMs) return
+      const hour = Math.floor(ms / 3_600_000) * 3_600_000
+      const tokens = (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_read_tokens ?? 0) + (u.cache_write_tokens ?? 0)
+      const key = `${hour}|${harness}`
+      buckets.set(key, (buckets.get(key) ?? 0) + tokens)
+    }
+    for (const m of perMessage) add(m.ts, m.harness, m)
+    for (const s of sessionOnly) add(s.ended_at ?? s.started_at, s.harness, s)
+    return c.json(
+      [...buckets].map(([key, tokens]) => {
+        const sep = key.indexOf('|')
+        return { t: Number(key.slice(0, sep)), harness: key.slice(sep + 1), tokens }
+      }),
+    )
+  })
+
+  // Distinct project paths seen across sessions, for the project filter dropdown.
+  app.get('/api/sessions/projects', async (c) => {
+    const rows = await db
+      .selectFrom('sessions')
+      .select('project_path')
+      .distinct()
+      .where('project_path', 'is not', null)
+      .orderBy('project_path')
+      .execute()
+    return c.json(rows.map((r) => r.project_path))
+  })
+
+  // Most active session projects over the trailing 7 days, ranked by total
+  // tokens summed across every harness. Grouped per (project, harness) in SQL
+  // so the harness breakdown comes along without a second scan.
+  app.get('/api/sessions/top-projects', async (c) => {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const rows = await db
+      .selectFrom('sessions')
+      .select(({ fn }) => [
+        'project_path',
+        'harness',
+        fn.count<number>('id').as('sessions'),
+        fn.sum<number | null>('input_tokens').as('input'),
+        fn.sum<number | null>('output_tokens').as('output'),
+        fn.sum<number | null>('cache_read_tokens').as('cache_read'),
+        fn.sum<number | null>('cache_write_tokens').as('cache_write'),
+      ])
+      .where('project_path', 'is not', null)
+      .where('started_at', '>=', cutoff)
+      .groupBy(['project_path', 'harness'])
+      .execute()
+    const byPath = new Map<string, { path: string; harnesses: string[]; total_tokens: number; sessions: number }>()
+    for (const r of rows) {
+      const key = r.project_path as string
+      const entry = byPath.get(key) ?? { path: key, harnesses: [], total_tokens: 0, sessions: 0 }
+      entry.harnesses.push(r.harness)
+      entry.total_tokens += (r.input ?? 0) + (r.output ?? 0) + (r.cache_read ?? 0) + (r.cache_write ?? 0)
+      entry.sessions += r.sessions
+      byPath.set(key, entry)
+    }
+    // Registered projects lend their display names; unregistered paths fall back to the basename.
+    const projects = await db.selectFrom('projects').select(['name', 'root_path']).execute()
+    const names = new Map(projects.map((p) => [p.root_path, p.name]))
+    const top = [...byPath.values()]
+      .sort((a, b) => b.total_tokens - a.total_tokens)
+      .slice(0, 5)
+      .map((p) => ({ ...p, harnesses: p.harnesses.sort(), name: names.get(p.path) ?? path.basename(p.path) }))
+    return c.json(top)
   })
 
   app.get('/api/sessions/:id', async (c) => {

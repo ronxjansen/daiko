@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { installedHarnesses } from '../core/discover.js'
 
 // Hook commands are uniform across harnesses:
 //  - "dai sync --hook" reads the hook payload from stdin (cwd / workspace_roots), syncs that
@@ -82,8 +83,6 @@ export interface HookInstallResult {
 
 interface HookInstaller {
   id: string
-  /** Config dir under $HOME (detection) and under the project root (project installs). */
-  dir: string
   install(root: string): HookInstallResult
 }
 
@@ -93,7 +92,6 @@ const configPath = (root: string, dir: string, name: string) => path.join(root, 
 const installers: HookInstaller[] = [
   {
     id: 'claude',
-    dir: '.claude',
     // Claude Code: hooks live in settings.json; timeouts are seconds, capture runs async
     // so it can never delay or break a session.
     install(root) {
@@ -110,7 +108,6 @@ const installers: HookInstaller[] = [
   },
   {
     id: 'codex',
-    dir: '.codex',
     // Codex: same nested format in hooks.json; timeouts are seconds. Project-local hooks
     // only load once the repo's .codex layer is trusted. No SessionEnd capture: Codex caps
     // SessionEnd hooks at 1s (too tight for a Node CLI) and Stop already captures every turn.
@@ -127,7 +124,6 @@ const installers: HookInstaller[] = [
   },
   {
     id: 'cursor',
-    dir: '.cursor',
     // Cursor: flat hooks.json ({version, hooks: {event: [{command}]}}). Sync only — Daiko
     // has no parser for Cursor transcripts yet, so a capture hook would have nothing to import.
     install(root) {
@@ -143,7 +139,6 @@ const installers: HookInstaller[] = [
   },
   {
     id: 'gemini',
-    dir: '.gemini',
     // Gemini CLI: nested format in settings.json; timeouts are milliseconds and hooks run
     // synchronously (no async flag), so capture gets a hard 30s cap.
     install(root) {
@@ -162,9 +157,10 @@ const installers: HookInstaller[] = [
 
 export const hookHarnessIds = installers.map((i) => i.id)
 
-/** Harnesses in use on this machine, judged by their global config dir (~/.claude, ~/.codex, ...). */
+/** Hook-capable harnesses installed on this machine, per the adapter registry's globalConfigDir. */
 export function detectHookHarnesses(home = os.homedir()): string[] {
-  return installers.filter((i) => fs.existsSync(path.join(home, i.dir))).map((i) => i.id)
+  const installed = new Set(installedHarnesses(home).map((h) => h.id))
+  return hookHarnessIds.filter((id) => installed.has(id))
 }
 
 export interface InstallHooksSummary {

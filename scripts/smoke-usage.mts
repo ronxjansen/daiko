@@ -153,5 +153,52 @@ const row = await migrated.selectFrom('sessions').selectAll().executeTakeFirstOr
 assert.equal(row.model, null, 'migrated columns exist and default to null')
 await migrated.destroy()
 
+// -- /api/sessions/usage: hourly buckets per harness ------------------------
+// Fresh DB with now-based fixtures so the 30-day window never ages them out.
+{
+  const { createApp } = await import('../src/server/index.js')
+  const usageDb = openDb(path.join(tmp, 'usage-endpoint.sqlite'))
+  const nowIso = new Date().toISOString()
+  const perMsgFile = path.join(tmp, 'claude-now.jsonl')
+  fs.writeFileSync(
+    perMsgFile,
+    [
+      JSON.stringify({ type: 'user', cwd: '/repo', timestamp: nowIso, message: { content: 'hi' } }),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: nowIso,
+        message: { id: 'msg_1', model: 'claude-fable-5', usage: claudeUsage, content: [{ type: 'text', text: 'hello' }] },
+      }),
+    ].join('\n'),
+  )
+  const cumulativeFile = path.join(tmp, 'codex-now.jsonl')
+  fs.writeFileSync(
+    cumulativeFile,
+    [
+      JSON.stringify({ timestamp: nowIso, type: 'session_meta', payload: { id: 'codex-now', cwd: '/repo' } }),
+      JSON.stringify({
+        timestamp: nowIso,
+        type: 'event_msg',
+        payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 1000, cached_input_tokens: 600, output_tokens: 100 } } },
+      }),
+      JSON.stringify({
+        timestamp: nowIso,
+        type: 'response_item',
+        payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] },
+      }),
+    ].join('\n'),
+  )
+  assert.equal(await importSessionFile(usageDb, { harness: 'claude', file: perMsgFile }), 'imported')
+  assert.equal(await importSessionFile(usageDb, { harness: 'codex', file: cumulativeFile }), 'imported')
+  const res = await createApp(usageDb).request('/api/sessions/usage')
+  assert.equal(res.status, 200)
+  const buckets = (await res.json()) as Array<{ t: number; harness: string; tokens: number }>
+  const hour = Math.floor(Date.parse(nowIso) / 3_600_000) * 3_600_000
+  const byHarness = new Map(buckets.map((b) => [b.harness, b]))
+  assert.deepEqual(byHarness.get('claude'), { t: hour, harness: 'claude', tokens: 355 }, 'claude bucket from per-message usage')
+  assert.deepEqual(byHarness.get('codex'), { t: hour, harness: 'codex', tokens: 1100 }, 'codex session-only usage attributed to its end hour')
+  await usageDb.destroy()
+}
+
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log('smoke-usage: all assertions passed')
