@@ -93,6 +93,9 @@ export function parseGeminiSession(file: string): ParsedSession | null {
 export const gemini: HarnessAdapter = {
   id: 'gemini',
   label: 'Gemini',
+  // Gemini CLI keeps MCP servers in .gemini/settings.json alongside unrelated settings
+  // (including Daiko's own hooks), so it is not offered as an MCP target yet.
+  layout: { agentFile: 'GEMINI.md' },
 
   // ~/.gemini/tmp/<project-hash>/chats/session-*.json
   discoverSessionFiles(home) {

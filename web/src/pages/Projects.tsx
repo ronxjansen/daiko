@@ -14,6 +14,14 @@ export function Projects() {
         </p>
       </header>
 
+      {projects.isError && (
+        <p className="empty">
+          <span>
+            Couldn't reach the server. Restart <code>dai webui</code> and reload.
+          </span>
+        </p>
+      )}
+
       {projects.data?.length === 0 && (
         <p className="empty">
           <span>No projects registered yet.</span>

@@ -29,6 +29,14 @@ export function SessionDetail() {
   })
 
   if (session.isLoading) return <p className="muted">Loading…</p>
+  if (session.isError)
+    return (
+      <p className="empty">
+        <span>
+          Couldn't reach the server. Restart <code>dai webui</code> and reload.
+        </span>
+      </p>
+    )
   const meta = session.data?.pages[0]
   if (!meta) return <p className="muted">Session not found.</p>
 

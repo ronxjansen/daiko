@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, timeAgo, TYPE_LABELS } from '../api'
+import { api, harnessLabel, timeAgo, TYPE_LABELS } from '../api'
+
+const formatBytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`)
 
 export function ArtifactDetail() {
   const { artifactId } = useParams({ from: '/artifacts/$artifactId' })
@@ -10,15 +12,23 @@ export function ArtifactDetail() {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [viewVersionId, setViewVersionId] = useState<string | null>(null)
+  // null = the artifact's own file (SKILL.md); otherwise a bundled file's path.
+  const [filePath, setFilePath] = useState<string | null>(null)
 
   const [shareMessage, setShareMessage] = useState<string | null>(null)
 
   const artifact = useQuery({ queryKey: ['artifact', artifactId], queryFn: () => api.artifact(artifactId) })
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects })
+  const harnesses = useQuery({ queryKey: ['harnesses'], queryFn: api.harnesses })
   const viewedVersion = useQuery({
     queryKey: ['version', artifactId, viewVersionId],
     queryFn: () => api.version(artifactId, viewVersionId!),
     enabled: viewVersionId !== null,
+  })
+  const viewedFile = useQuery({
+    queryKey: ['artifact-file', artifactId, filePath],
+    queryFn: () => api.artifactFile(artifactId, filePath!),
+    enabled: filePath !== null,
   })
 
   const invalidate = () => {
@@ -29,11 +39,25 @@ export function ArtifactDetail() {
   }
 
   const save = useMutation({
-    mutationFn: (content: string) => api.saveArtifact(artifactId, content),
+    mutationFn: (content: string) => api.saveArtifact(artifactId, content, filePath ?? undefined),
     onSuccess: () => {
       setEditing(false)
       invalidate()
+      queryClient.invalidateQueries({ queryKey: ['artifact-file', artifactId] })
     },
+  })
+  const setTargets = useMutation({
+    mutationFn: (targets: string[]) => api.setTargets(artifactId, targets),
+    onSuccess: (result) => {
+      setShareMessage(
+        result.rendered_paths.length === 0
+          ? 'No target can hold this in a project tree, so sync will write nothing.'
+          : `Now written to ${result.rendered_paths.map((r) => r.relPath).join(', ')} on the next sync.`,
+      )
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ['project'] })
+    },
+    onError: (err: Error) => setShareMessage(`Targets failed: ${err.message}`),
   })
   const pin = useMutation({
     mutationFn: (versionId: string | null) => api.pinVersion(artifactId, versionId),
@@ -71,10 +95,33 @@ export function ArtifactDetail() {
   })
 
   if (artifact.isLoading) return <p className="muted">Loading…</p>
+  if (artifact.isError)
+    return (
+      <p className="empty">
+        <span>
+          Couldn't reach the server. Restart <code>dai webui</code> and reload.
+        </span>
+      </p>
+    )
   if (!artifact.data) return <p className="muted">Artifact not found.</p>
 
   const a = artifact.data
-  const shownContent = viewVersionId ? (viewedVersion.data?.content ?? '') : a.content
+  // A skill is a directory: SKILL.md plus its bundled scripts, references and assets.
+  const bundled = filePath ? a.files.find((f) => f.path === filePath) : undefined
+  const isBinary = bundled?.encoding === 'base64'
+  const editable = !isBinary && viewVersionId === null
+  const shownContent = viewVersionId
+    ? (viewedVersion.data?.content ?? '')
+    : bundled
+      ? isBinary
+        ? `${bundled.path} — binary file, ${formatBytes(bundled.size)}. Stored and synced as-is.`
+        : (viewedFile.data?.content ?? '')
+      : a.content
+  const startEditing = () => {
+    setDraft(shownContent)
+    setViewVersionId(null)
+    setEditing(true)
+  }
 
   return (
     <div>
@@ -92,21 +139,17 @@ export function ArtifactDetail() {
               ) : (
                 <span>Global</span>
               )}{' '}
-              · <span className="mono">{a.rel_path}</span> · harness: {a.harness}
+              · from <span className="mono">{a.origin_path}</span>
+              {a.rendered_paths.length > 0 && (
+                <> · written to <span className="mono">{a.rendered_paths.map((r) => r.relPath).join(', ')}</span></>
+              )}
               {a.pinned_version_id && <span className="pin-badge">pinned</span>}
             </p>
           </div>
           <div className="button-row">
-            {!editing && (
-              <button
-                className="btn"
-                onClick={() => {
-                  setDraft(a.content)
-                  setViewVersionId(null)
-                  setEditing(true)
-                }}
-              >
-                Edit
+            {!editing && editable && (
+              <button className="btn" onClick={startEditing}>
+                Edit{bundled ? ` ${bundled.path}` : ''}
               </button>
             )}
             <button
@@ -114,7 +157,7 @@ export function ArtifactDetail() {
               onClick={() => {
                 const globalNote =
                   !a.project_id && a.type === 'mcp_server'
-                    ? ` This also removes it from the ${a.harness} global config (${a.rel_path}).`
+                    ? ` This also removes it from the ${harnessLabel(a.origin_harness, harnesses.data)} global config (${a.origin_path}).`
                     : ''
                 if (confirm(`Delete "${a.name}" and all its versions?${globalNote}`)) remove.mutate()
               }}
@@ -138,6 +181,33 @@ export function ArtifactDetail() {
               </button>
             </div>
           )}
+          {a.files.length > 0 && !viewVersionId && (
+            <nav className="file-tabs" aria-label="Skill files">
+              <button
+                className={`file-tab${filePath === null ? ' selected' : ''}`}
+                onClick={() => {
+                  setEditing(false)
+                  setFilePath(null)
+                }}
+              >
+                SKILL.md
+              </button>
+              {a.files.map((f) => (
+                <button
+                  key={f.path}
+                  className={`file-tab${filePath === f.path ? ' selected' : ''}`}
+                  onClick={() => {
+                    setEditing(false)
+                    setFilePath(f.path)
+                  }}
+                  title={`${formatBytes(f.size)}${f.exec ? ' · executable' : ''}`}
+                >
+                  {f.path}
+                  {f.exec && <span className="file-tab-flag">exec</span>}
+                </button>
+              ))}
+            </nav>
+          )}
           {editing ? (
             <>
               <textarea className="editor" value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
@@ -156,6 +226,39 @@ export function ArtifactDetail() {
         </section>
 
         <div className="detail-side">
+          <aside className="panel">
+            <h2>Targets</h2>
+            <p className="muted">
+              Harnesses this {TYPE_LABELS[a.type].toLowerCase()} is written for. One stored copy, one file per harness
+              that can hold it.
+            </p>
+            <ul className="share-list">
+              {a.available_targets.map((h) => {
+                const on = a.targets.includes(h)
+                const relPath = a.rendered_paths.find((r) => r.harness === h)?.relPath
+                return (
+                  <li key={h}>
+                    <span className="row-link">
+                      {harnessLabel(h, harnesses.data)}
+                      {relPath && <span className="muted mono"> {relPath}</span>}
+                    </span>
+                    <button
+                      className={`btn btn-small${on ? '' : ' btn-primary'}`}
+                      onClick={() => setTargets.mutate(on ? a.targets.filter((t) => t !== h) : [...a.targets, h])}
+                      disabled={setTargets.isPending}
+                      title={on ? `Stop writing this to ${h}` : `Also write this to ${h}`}
+                    >
+                      {on ? 'Remove' : 'Add'}
+                    </button>
+                  </li>
+                )
+              })}
+              {a.available_targets.length === 0 && (
+                <li className="muted">No harness can hold a {TYPE_LABELS[a.type].toLowerCase()} in a project tree yet.</li>
+              )}
+            </ul>
+          </aside>
+
           <aside className="panel">
             <h2>Projects</h2>
             <p className="muted">Add this {TYPE_LABELS[a.type].toLowerCase()} to a repo, or remove it again.</p>

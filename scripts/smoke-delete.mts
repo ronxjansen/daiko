@@ -23,6 +23,8 @@ fs.writeFileSync(
       mcpServers: {
         keepme: { command: 'keep', args: [] },
         deleteme: { command: 'gone', args: ['--x'] },
+        // Registered with two harnesses: one canonical artifact, two files to clean up.
+        shared: { command: 'shared' },
       },
     },
     null,
@@ -32,7 +34,11 @@ fs.writeFileSync(
 fs.mkdirSync(path.join(home, '.cursor'), { recursive: true })
 fs.writeFileSync(
   path.join(home, '.cursor', 'mcp.json'),
-  JSON.stringify({ mcpServers: { cursorkeep: { url: 'http://a' }, cursorgone: { url: 'http://b' } } }, null, 2),
+  JSON.stringify(
+    { mcpServers: { cursorkeep: { url: 'http://a' }, cursorgone: { url: 'http://b' }, shared: { command: 'shared' } } },
+    null,
+    2,
+  ),
 )
 fs.mkdirSync(path.join(home, '.codex'), { recursive: true })
 fs.writeFileSync(
@@ -65,7 +71,10 @@ const realHomedir = os.homedir
 try {
   await addProject(db, repo)
   const globals = await addGlobalMcpServers(db)
-  assert.strictEqual(globals.added, 6, `expected 6 global servers, got ${globals.added}`)
+  // 7, not 8: "shared" is registered with two harnesses but is one canonical artifact.
+  assert.strictEqual(globals.added, 7, `expected 7 global servers, got ${globals.added}`)
+  const sharedRows = await db.selectFrom('artifacts').selectAll().where('name', '=', 'shared').execute()
+  assert.strictEqual(sharedRows.length, 1, 'the same server in two harness configs should be one artifact')
 
   const byName = async (name: string) =>
     db.selectFrom('artifacts').selectAll().where('name', '=', name).executeTakeFirstOrThrow()
@@ -79,7 +88,11 @@ try {
 
   // 1. Delete the claude global server: gone from ~/.claude.json AND the project .mcp.json.
   const summary = await deleteArtifact(db, (await byName('deleteme')).id, home)
-  assert.strictEqual(summary.global?.status, 'removed')
+  // Every harness-global config is checked, and the one that had it reports 'removed'.
+  assert.deepStrictEqual(
+    summary.globals.filter((g) => g.status === 'removed').map((g) => path.basename(g.file)),
+    ['.claude.json'],
+  )
   const claudeCfg = JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8'))
   assert.ok(!('deleteme' in claudeCfg.mcpServers), 'deleteme still in ~/.claude.json')
   assert.ok('keepme' in claudeCfg.mcpServers, 'keepme lost from ~/.claude.json')
@@ -96,7 +109,7 @@ try {
   // 2. Delete the cursor global server.
   await deleteArtifact(db, (await byName('cursorgone')).id, home)
   const cursorCfg = JSON.parse(fs.readFileSync(path.join(home, '.cursor', 'mcp.json'), 'utf8'))
-  assert.deepStrictEqual(Object.keys(cursorCfg.mcpServers), ['cursorkeep'])
+  assert.deepStrictEqual(Object.keys(cursorCfg.mcpServers), ['cursorkeep', 'shared'])
 
   // 3. Delete the codex TOML server: sections removed, comments/other sections kept.
   await deleteArtifact(db, (await byName('tomlgone')).id, home)
@@ -108,6 +121,15 @@ try {
   const rescanToml = scanGlobalMcpServers(home).map((s) => s.name)
   assert.ok(rescanToml.includes('tomlkeep') && !rescanToml.includes('tomlgone'), 'TOML rescan wrong')
 
+  // 3b. Deleting a server registered with two harnesses clears both configs, so a rescan
+  // cannot resurrect it and no harness is left loading something the store says is gone.
+  const sharedDelete = await deleteArtifact(db, sharedRows[0].id, home)
+  assert.deepStrictEqual(
+    sharedDelete.globals.filter((g) => g.status === 'removed').map((g) => path.basename(g.file)).sort(),
+    ['.claude.json', 'mcp.json'],
+  )
+  assert.ok(!scanGlobalMcpServers(home).some((s) => s.name === 'shared'), 'shared resurrected by rescan')
+
   // 4. Invalid JSON: delete must abort, DB row must survive.
   fs.writeFileSync(path.join(home, '.claude.json'), '{ this is not json')
   const keep = await byName('keepme')
@@ -118,7 +140,7 @@ try {
   // 5. Server absent from file (edited manually): delete proceeds with status 'absent'.
   fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({ mcpServers: {} }))
   const s5 = await deleteArtifact(db, keep.id, home)
-  assert.strictEqual(s5.global?.status, 'absent')
+  assert.ok(s5.globals.length > 0 && s5.globals.every((g) => g.status === 'absent'), 'expected every config to report absent')
 
   console.log('all smoke tests passed')
 } finally {

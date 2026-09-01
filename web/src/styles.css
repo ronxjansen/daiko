@@ -1,23 +1,42 @@
-/* Daiko webui — "plate section" world: uncoated near-white stock, ink, hairlines,
-   one periwinkle accent, mono-caps labels, 0-radius controls, sidebar navigation. */
+/* Daiko webui — quiet ledger: uncoated stock in two lights, ink and chalk,
+   1px hairline rules, one periwinkle seal, mono ledger figures, 0-radius.
+   Calm but precise: tint washes instead of inversions, tighter density. */
 
 :root {
-  --paper: #f5f4f6;
-  --paper-warm: #faf6f5;
-  --paper-cool: #eef3ef;
-  --plate: #fbfbfc;
-  --ink: #16181a;
-  --ink-soft: #3f4347;
-  --muted: #5c6166;
-  --hairline: #c9c7c4;
-  --hairline-soft: #dddbd8;
-  --seal: #dcddf3;
-  --seal-ink: #4f53b3;
-  --reg-red: #b3392b;
-  --grotesk: 'Schibsted Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  color-scheme: light dark;
+
+  /* Ground: uncoated stock by day, night stock after dark */
+  --paper: light-dark(#f6f5f3, #16171a);
+  --paper-warm: light-dark(#faf7f4, #1a191d);
+  --paper-cool: light-dark(#eff2f0, #15181a);
+  --plate: light-dark(#fbfaf9, #1c1d21);
+
+  /* Ink and chalk */
+  --ink: light-dark(#1a1c1e, #e6e4e0);
+  --ink-soft: light-dark(#43474b, #b6b4af);
+  --muted: light-dark(#5f6469, #94928d);
+
+  /* Rules */
+  --hairline: light-dark(#d2cfcb, #33353a);
+  --hairline-soft: light-dark(#e3e0dc, #27292d);
+  --rule: light-dark(#a5a29e, #4b4e54);
+
+  /* Seal — the one accent */
+  --seal: light-dark(#dfe0f4, #2d2f4c);
+  --seal-ink: light-dark(#4f53b3, #a5aaee);
+
+  /* Registration red — destructive only */
+  --reg-red: light-dark(#a83a2d, #d98376);
+
+  /* Washes */
+  --tint: light-dark(rgba(26, 28, 30, 0.04), rgba(230, 228, 224, 0.05));
+  --tint-strong: light-dark(rgba(26, 28, 30, 0.07), rgba(230, 228, 224, 0.09));
+  --red-tint: light-dark(rgba(168, 58, 45, 0.08), rgba(217, 131, 118, 0.1));
+
+  --sans: 'Public Sans Variable', -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'Red Hat Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
-  --invert: 0.1s ease;
-  --lift: 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+
+  --wash: 0.15s ease;
 }
 
 * {
@@ -31,13 +50,13 @@ html {
 body {
   margin: 0;
   color: var(--ink);
-  font-family: var(--grotesk);
-  font-size: 15px;
+  font-family: var(--sans);
+  font-size: 14px;
   line-height: 1.55;
   font-weight: 400;
   background:
-    radial-gradient(1200px 800px at 8% -5%, var(--paper-warm) 0%, rgba(250, 246, 245, 0) 60%),
-    radial-gradient(1100px 700px at 104% 6%, var(--paper-cool) 0%, rgba(238, 243, 239, 0) 55%),
+    radial-gradient(1200px 800px at 8% -5%, var(--paper-warm) 0%, transparent 60%),
+    radial-gradient(1100px 700px at 104% 6%, var(--paper-cool) 0%, transparent 55%),
     var(--paper);
   -webkit-font-smoothing: antialiased;
 }
@@ -62,9 +81,9 @@ body {
 
 .token {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
@@ -81,19 +100,20 @@ body {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 48px;
-  padding: 26px 24px 32px;
-  border-right: 1px solid var(--hairline);
+  gap: 44px;
+  padding: 26px 20px 32px;
+  border-right: 1px solid var(--hairline-soft);
 }
 
 .wordmark {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 0 8px;
   color: var(--ink);
   text-decoration: none;
   font-weight: 500;
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: -0.01em;
 }
 
@@ -101,20 +121,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--ink);
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--rule);
   border-radius: 50%;
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
-  transition: background var(--invert), color var(--invert);
+  transition: border-color var(--wash), color var(--wash);
 }
 
 .wordmark:hover .wordmark-badge {
-  background: var(--ink);
-  color: var(--paper);
+  border-color: var(--seal-ink);
+  color: var(--seal-ink);
 }
 
 .sidenav {
@@ -125,26 +145,26 @@ body {
 }
 
 .sidenav a {
-  color: var(--ink-soft);
+  color: var(--muted);
   text-decoration: none;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   white-space: nowrap;
-  padding: 9px 12px;
-  transition: background var(--invert), color var(--invert);
+  padding: 8px 10px;
+  transition: background var(--wash), color var(--wash);
 }
 
 .sidenav a:hover {
   color: var(--ink);
-  background: rgba(22, 24, 26, 0.045);
+  background: var(--tint);
 }
 
 .sidenav a.active {
-  color: var(--paper);
-  background: var(--ink);
+  color: var(--ink);
+  background: var(--tint-strong);
 }
 
 /* ---------- Sheet ---------- */
@@ -155,37 +175,59 @@ body {
   width: 100%;
   max-width: 1120px;
   margin: 0 auto;
-  padding: 56px 40px 96px;
+  padding: 48px 40px 88px;
   min-width: 0;
+}
+
+/* One authored moment: each page settles onto the stock */
+.content > * {
+  animation: page-in 0.4s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content > * {
+    animation: none;
+  }
 }
 
 /* ---------- Page headers ---------- */
 
 .page-header {
   position: relative;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .page-header h1 {
-  margin: 0 0 8px;
-  font-size: 44px;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  margin: 0 0 6px;
+  font-size: 29px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
 
 .page-header p {
   margin: 0;
-  max-width: 60ch;
+  max-width: 62ch;
 }
 
 .page-header h1 .badge {
   vertical-align: middle;
   margin-right: 10px;
   position: relative;
-  top: -5px;
+  top: -3px;
 }
 
 .header-row {
@@ -210,16 +252,16 @@ body {
 
 .mono {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 
 code {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   background: var(--plate);
-  border: 1px solid var(--hairline);
-  padding: 2px 6px;
+  border: 1px solid var(--hairline-soft);
+  padding: 1.5px 5px;
 }
 
 /* ---------- Count row ---------- */
@@ -227,25 +269,25 @@ code {
 .stat-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  margin-bottom: 56px;
+  grid-template-columns: repeat(6, 1fr);
+  margin-bottom: 48px;
 }
 
 .stat-card {
   position: relative;
   display: block;
-  padding: 22px 20px 18px;
+  padding: 18px 16px 15px;
   border: 1px solid var(--hairline);
   margin: 0 -1px -1px 0;
   text-decoration: none;
   color: inherit;
   background: transparent;
-  transition: background var(--invert), color var(--invert);
+  transition: background var(--wash);
 }
 
 .stat-value {
   font-family: var(--mono);
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 400;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
@@ -254,44 +296,47 @@ code {
 .stat-label {
   margin-top: 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--muted);
-  transition: color var(--invert);
+  transition: color var(--wash);
 }
 
 a.stat-card:hover {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--tint);
+}
+
+a.stat-card:hover .stat-value {
+  color: var(--seal-ink);
 }
 
 a.stat-card:hover .stat-label {
-  color: var(--hairline-soft);
+  color: var(--ink-soft);
 }
 
 /* ---------- Sections ---------- */
 
 .panel {
-  margin-bottom: 48px;
+  margin-bottom: 40px;
 }
 
 .panel h2,
 .section-label {
   margin: 0 0 4px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--ink);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--ink);
+  color: var(--ink-soft);
 }
 
 .panel > .muted {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 /* ---------- Tables ---------- */
@@ -304,17 +349,19 @@ a.stat-card:hover .stat-label {
 .table th {
   text-align: left;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--muted);
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ink);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
 }
 
 .table td {
-  padding: 14px 16px;
+  padding: 10px 14px;
+  font-size: 13.5px;
   border-bottom: 1px solid var(--hairline-soft);
   vertical-align: baseline;
 }
@@ -332,11 +379,11 @@ a.stat-card:hover .stat-label {
 }
 
 .table tbody tr {
-  transition: background var(--invert);
+  transition: background var(--wash);
 }
 
 .table tbody tr:hover {
-  background: rgba(22, 24, 26, 0.045);
+  background: var(--tint);
 }
 
 .row-link {
@@ -348,6 +395,7 @@ a.stat-card:hover .stat-label {
 .row-link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+  text-decoration-color: var(--rule);
 }
 
 .row-link.muted {
@@ -360,42 +408,44 @@ a.stat-card:hover .stat-label {
 .badge {
   display: inline-block;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   border: 1px solid var(--hairline);
   color: var(--ink-soft);
-  padding: 3px 8px;
+  padding: 2px 7px;
   vertical-align: middle;
-  background: var(--plate);
+  background: transparent;
+  white-space: nowrap;
 }
 
 .pin-badge {
   display: inline-block;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--seal-ink);
   background: var(--seal);
-  padding: 3px 8px;
+  padding: 2px 7px;
   margin-left: 8px;
-  transform: rotate(-2deg);
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .tag {
   display: inline-block;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--paper);
-  background: var(--ink);
-  padding: 3px 8px;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  padding: 2px 7px;
+  white-space: nowrap;
 }
 
 /* ---------- Lists ---------- */
@@ -412,20 +462,22 @@ a.stat-card:hover .stat-label {
   display: flex;
   align-items: baseline;
   gap: 14px;
-  padding: 14px 0;
+  padding: 10px 0;
   text-decoration: none;
   color: var(--ink);
   border-bottom: 1px solid var(--hairline-soft);
-  transition: background var(--invert);
+  transition: background var(--wash);
 }
 
 .activity-list a:hover,
 .artifact-list a:hover {
-  background: rgba(22, 24, 26, 0.045);
+  background: var(--tint);
 }
 
 .activity-list .badge {
   align-self: center;
+  min-width: 84px;
+  text-align: center;
 }
 
 .activity-name,
@@ -436,37 +488,37 @@ a.stat-card:hover .stat-label {
 .activity-meta {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   white-space: nowrap;
 }
 
 .artifact-list a > .muted:last-child {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   white-space: nowrap;
 }
 
 /* ---------- Buttons ---------- */
 
 .btn {
-  border: 1px solid var(--ink);
+  border: 1px solid var(--hairline);
   background: transparent;
   color: var(--ink);
   border-radius: 0;
-  padding: 10px 18px;
+  padding: 8px 15px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background var(--invert), color var(--invert), border-color var(--invert);
+  transition: background var(--wash), color var(--wash), border-color var(--wash);
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--tint);
+  border-color: var(--rule);
 }
 
 .btn:disabled {
@@ -475,34 +527,34 @@ a.stat-card:hover .stat-label {
 }
 
 .btn-primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--seal);
+  border-color: var(--seal-ink);
+  color: var(--seal-ink);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: transparent;
-  color: var(--ink);
+  background: color-mix(in srgb, var(--seal) 94%, var(--seal-ink));
+  border-color: var(--seal-ink);
+  color: var(--seal-ink);
 }
 
 .btn-danger {
   color: var(--reg-red);
-  border-color: var(--reg-red);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: var(--reg-red);
+  background: var(--red-tint);
   border-color: var(--reg-red);
-  color: var(--paper);
 }
 
 .btn-small {
-  padding: 5px 10px;
-  font-size: 10px;
+  padding: 4px 9px;
+  font-size: 9.5px;
 }
 
 .button-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   margin-top: 8px;
   flex-wrap: wrap;
@@ -512,19 +564,25 @@ a.stat-card:hover .stat-label {
   border: 1px solid var(--seal-ink);
   background: var(--seal);
   color: var(--ink);
-  padding: 12px 16px;
-  margin: 16px 0 0;
-  font-size: 14px;
+  padding: 10px 14px;
+  margin: 14px 0 0;
+  font-size: 13.5px;
   width: 100%;
+}
+
+/* Sync kept a local edit: the notice is a decision to make, not a receipt. */
+.notice-warn {
+  border-color: var(--reg-red);
+  background: var(--red-tint);
 }
 
 /* ---------- Empty states ---------- */
 
 .empty {
-  margin-top: 16px;
-  border: 1px solid var(--hairline);
+  margin-top: 14px;
+  border: 1px solid var(--hairline-soft);
   background: var(--plate);
-  padding: 56px 32px;
+  padding: 44px 32px;
   text-align: center;
   color: var(--muted);
 }
@@ -551,11 +609,11 @@ a.stat-card:hover .stat-label {
 .content-view {
   margin: 0;
   background: var(--plate);
-  border: 1px solid var(--hairline);
-  padding: 28px;
+  border: 1px solid var(--hairline-soft);
+  padding: 24px;
   font-family: var(--mono);
   font-size: 12.5px;
-  line-height: 1.65;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 70vh;
@@ -571,18 +629,18 @@ a.stat-card:hover .stat-label {
   border-radius: 0;
   font-family: var(--mono);
   font-size: 12.5px;
-  line-height: 1.65;
+  line-height: 1.6;
   padding: 20px;
   resize: vertical;
 }
 
-.editor:focus {
-  outline: none;
-  border-color: var(--ink);
+.editor:focus-visible {
+  outline-offset: 0;
+  border-color: var(--seal-ink);
 }
 
 .content-plate .button-row {
-  margin-top: 16px;
+  margin-top: 14px;
 }
 
 /* ---------- Sharing ---------- */
@@ -590,7 +648,7 @@ a.stat-card:hover .stat-label {
 .detail-side {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 36px;
   min-width: 0;
 }
 
@@ -605,7 +663,7 @@ a.stat-card:hover .stat-label {
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--hairline-soft);
-  padding: 10px 0;
+  padding: 8px 0;
 }
 
 .share-list li .row-link {
@@ -636,14 +694,18 @@ a.stat-card:hover .stat-label {
   color: var(--ink);
   border: 1px solid var(--hairline);
   border-radius: 0;
-  font-family: var(--grotesk);
-  font-size: 14px;
-  padding: 10px 14px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  padding: 9px 12px;
 }
 
-.search-input:focus {
-  outline: none;
-  border-color: var(--ink);
+.search-input::placeholder {
+  color: var(--muted);
+}
+
+.search-input:focus-visible {
+  outline-offset: 0;
+  border-color: var(--seal-ink);
 }
 
 /* ---------- Version ledger ---------- */
@@ -659,8 +721,8 @@ a.stat-card:hover .stat-label {
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--hairline-soft);
-  padding: 4px 0;
-  transition: background var(--invert);
+  padding: 3px 0;
+  transition: background var(--wash);
 }
 
 .version-list li.selected {
@@ -680,15 +742,15 @@ a.stat-card:hover .stat-label {
   background: none;
   border: none;
   color: var(--ink);
-  padding: 10px 6px;
+  padding: 8px 6px;
   cursor: pointer;
   text-align: left;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .version-row:hover {
-  background: rgba(22, 24, 26, 0.045);
+  background: var(--tint);
 }
 
 .version-row .mono {
@@ -696,7 +758,7 @@ a.stat-card:hover .stat-label {
 }
 
 .version-row .muted {
-  font-size: 11.5px;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -706,11 +768,11 @@ a.stat-card:hover .stat-label {
 
 @media (max-width: 900px) {
   .stat-card {
-    padding: 16px 14px 13px;
+    padding: 14px 12px 11px;
   }
 
   .stat-value {
-    font-size: 24px;
+    font-size: 21px;
   }
 
   .app {
@@ -719,22 +781,27 @@ a.stat-card:hover .stat-label {
 
   .sidebar {
     align-self: stretch;
-    height: 64px;
+    height: 60px;
     width: 100%;
     flex-direction: row;
     align-items: center;
     gap: 24px;
-    padding: 0 24px;
+    padding: 0 20px;
     border-right: none;
-    border-bottom: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline-soft);
     background: color-mix(in srgb, var(--paper) 88%, transparent);
     backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  .wordmark {
+    padding: 0;
   }
 
   .sidenav {
     flex-direction: row;
     align-items: center;
-    gap: 18px;
+    gap: 14px;
     flex: 1;
     overflow-x: auto;
   }
@@ -744,21 +811,21 @@ a.stat-card:hover .stat-label {
   }
 
   .content {
-    padding: 40px 24px 72px;
+    padding: 36px 24px 64px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 640px) {
   .page-header h1 {
-    font-size: 32px;
+    font-size: 24px;
   }
 
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .stat-card:last-child {
-    grid-column: 1 / -1;
   }
 
   .wordmark > span:last-child {
@@ -774,12 +841,28 @@ a.stat-card:hover .stat-label {
 
   .table td,
   .table th {
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* All five nav tokens must fit a 390px bar without clipping */
+  .sidebar {
+    gap: 14px;
+    padding: 0 14px;
   }
 
   .sidenav {
-    gap: 10px;
+    gap: 4px;
+  }
+
+  .sidenav a {
+    padding: 5px 5px;
+    font-size: 9.5px;
+    letter-spacing: 0.05em;
+  }
+
+  .activity-list .badge {
+    min-width: 0;
   }
 }
 
@@ -789,29 +872,131 @@ a.stat-card:hover .stat-label {
   }
 }
 
+/* ---------- Session cadence heatmap ---------- */
+
+.heatmap {
+  display: grid;
+  grid-template-columns: max-content repeat(24, 1fr);
+  gap: 2px;
+  margin-top: 16px;
+}
+
+.heatmap-hour,
+.heatmap-day {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.heatmap-hour {
+  align-self: end;
+  padding-bottom: 3px;
+}
+
+.heatmap-day {
+  align-self: center;
+  padding-right: 8px;
+}
+
+/* Sequential ramp mixed from the seal so each mode derives its own steps:
+   deeper ink by day, brighter chalk by night — more sessions, more seal. */
+.heatmap-cell {
+  height: 14px;
+  background: var(--tint);
+}
+
+.heatmap-cell[data-level='1'] {
+  background: color-mix(in srgb, var(--seal-ink) 18%, var(--paper));
+}
+
+.heatmap-cell[data-level='2'] {
+  background: color-mix(in srgb, var(--seal-ink) 40%, var(--paper));
+}
+
+.heatmap-cell[data-level='3'] {
+  background: color-mix(in srgb, var(--seal-ink) 65%, var(--paper));
+}
+
+.heatmap-cell[data-level='4'] {
+  background: color-mix(in srgb, var(--seal-ink) 90%, var(--paper));
+}
+
+.heatmap > .heatmap-cell:hover {
+  outline: 1px solid var(--seal-ink);
+  outline-offset: 0;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.heatmap-scale {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heatmap-scale .heatmap-cell {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 640px) {
+  .heatmap {
+    gap: 2px;
+  }
+
+  .heatmap-cell {
+    height: 15px;
+  }
+
+  .heatmap-hour-minor {
+    visibility: hidden;
+  }
+}
+
 /* ---------- Sessions ---------- */
 
 .session-preview {
   display: inline-block;
-  max-width: 460px;
+  max-width: 380px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: middle;
 }
 
-.badge-harness-claude {
-  border-color: var(--seal-ink);
-  color: var(--seal-ink);
+@media (max-width: 640px) {
+  .session-preview {
+    max-width: 52vw;
+  }
 }
 
-.badge-harness-codex {
-  border-color: var(--ink-soft);
+/* Harness identity rides in the label text; badges stay in the neutral
+   ledger voice so the seal keeps sole-accent duty and red stays destructive.
+   Matched by prefix so a new harness in the registry needs no CSS. */
+[class*='badge-harness-'] {
+  border-color: var(--rule);
+  color: var(--ink-soft);
 }
 
-.badge-harness-gemini {
-  border-color: var(--reg-red);
-  color: var(--reg-red);
+/* An artifact renders into several harnesses, so its badges sit in a row. */
+[class*='badge-harness-'] + [class*='badge-harness-'] {
+  margin-left: 4px;
 }
 
 .pager {
@@ -819,7 +1004,7 @@ a.stat-card:hover .stat-label {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 18px 0;
+  padding: 16px 0;
 }
 
 /* ---------- Transcript ---------- */
@@ -829,7 +1014,7 @@ a.stat-card:hover .stat-label {
 }
 
 .msg {
-  padding: 14px 20px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--hairline-soft);
 }
 
@@ -841,14 +1026,14 @@ a.stat-card:hover .stat-label {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .msg-who {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
@@ -863,19 +1048,19 @@ a.stat-card:hover .stat-label {
 }
 
 .msg-tool {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--ink);
 }
 
 .msg-time {
-  font-size: 11px;
+  font-size: 10.5px;
   margin-left: auto;
 }
 
 .msg-body {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -883,13 +1068,12 @@ a.stat-card:hover .stat-label {
 }
 
 .msg-user .msg-body {
-  font-family: var(--grotesk);
-  font-size: 14px;
+  font-family: var(--sans);
+  font-size: 13.5px;
 }
 
 .msg-user {
-  background: var(--paper-warm);
-  border-left: 2px solid var(--seal-ink);
+  background: color-mix(in srgb, var(--seal) 42%, transparent);
 }
 
 .msg-kind-thinking .msg-body,
@@ -910,16 +1094,16 @@ a.stat-card:hover .stat-label {
 
 .stat-grid-usage {
   grid-template-columns: repeat(6, 1fr);
-  margin-bottom: 40px;
+  margin-bottom: 36px;
 }
 
 .stat-grid-usage .stat-value {
-  font-size: 22px;
+  font-size: 19px;
 }
 
 .msg-usage {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
@@ -933,4 +1117,43 @@ a.stat-card:hover .stat-label {
   .stat-grid-usage {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ---------- Skill files ---------- */
+
+/* A skill ships a whole directory; its files sit above the content they belong to. */
+.file-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.file-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--hairline);
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.file-tab:hover {
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.file-tab.selected {
+  color: var(--ink);
+  border-color: var(--seal-ink);
+  background: var(--seal);
+}
+
+.file-tab-flag {
+  margin-left: 7px;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }

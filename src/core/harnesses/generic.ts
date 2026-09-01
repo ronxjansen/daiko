@@ -1,17 +1,13 @@
-import type { HarnessAdapter, ScannedArtifact } from './types.js'
-import { scanAgentFile } from './util.js'
+import type { HarnessAdapter } from './types.js'
 
-/** Cross-harness conventions (AGENTS.md / AGENT.md) not owned by any single tool. */
+/**
+ * Cross-harness conventions (AGENTS.md / AGENT.md, .agents/skills) not owned by any single
+ * tool. Targeting `generic` is how you deploy an artifact in the vendor-neutral layout that
+ * every harness with AGENTS.md support can read.
+ */
 export const generic: HarnessAdapter = {
   id: 'generic',
   label: 'Generic',
-
-  scanProjectArtifacts(root) {
-    const out: ScannedArtifact[] = []
-    for (const file of ['AGENTS.md', 'AGENT.md']) {
-      const found = scanAgentFile(root, file, 'generic')
-      if (found) out.push(found)
-    }
-    return out
-  },
+  // AGENT.md is the older singular spelling: still read, never written back.
+  layout: { agentFile: 'AGENTS.md', agentFileAliases: ['AGENT.md'], skillsDir: '.agents/skills' },
 }

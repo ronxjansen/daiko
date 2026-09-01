@@ -11,6 +11,14 @@ export function ArtifactList({ type, title }: { type: ArtifactType; title: strin
         <h1>{title}</h1>
       </header>
 
+      {artifacts.isError && (
+        <p className="empty">
+          <span>
+            Couldn't reach the server. Restart <code>dai webui</code> and reload.
+          </span>
+        </p>
+      )}
+
       {artifacts.data?.length === 0 && (
         <p className="empty">
           <span>
@@ -24,7 +32,7 @@ export function ArtifactList({ type, title }: { type: ArtifactType; title: strin
           <tr>
             <th>Name</th>
             <th className="col-hide-sm">Project</th>
-            <th className="col-hide-sm">Source</th>
+            <th className="col-hide-sm">Targets</th>
             <th>Versions</th>
             <th>Updated</th>
           </tr>
@@ -44,10 +52,16 @@ export function ArtifactList({ type, title }: { type: ArtifactType; title: strin
                     {a.project_name}
                   </Link>
                 ) : (
-                  <span className="muted">Global ({a.harness})</span>
+                  <span className="muted">Global</span>
                 )}
               </td>
-              <td className="muted mono col-hide-sm">{a.rel_path}</td>
+              <td className="col-hide-sm" title={a.rendered_paths.map((r) => r.relPath).join('\n')}>
+                {a.targets.map((h) => (
+                  <span key={h} className={`badge badge-harness-${h}`}>
+                    {h}
+                  </span>
+                ))}
+              </td>
               <td className="mono">{a.version_count}</td>
               <td className="muted mono">{timeAgo(a.updated_at)}</td>
             </tr>
