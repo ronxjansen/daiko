@@ -79,6 +79,13 @@ export function formatCost(usd: number): string {
   return usd >= 0.01 || usd === 0 ? `$${usd.toFixed(2)}` : '<$0.01'
 }
 
+/** One hour of token usage for one harness; `t` is the UTC hour start in epoch ms. */
+export interface UsageBucket {
+  t: number
+  harness: SessionHarness
+  tokens: number
+}
+
 export interface SessionList {
   sessions: Session[]
   total: number
@@ -98,6 +105,15 @@ export interface ActivityRow {
   artifact_name: string
   type: ArtifactType
   project_name: string | null
+}
+
+/** A session project ranked by 7-day token volume, with its harness breakdown. */
+export interface TopProject {
+  name: string
+  path: string
+  harnesses: SessionHarness[]
+  total_tokens: number
+  sessions: number
 }
 
 export interface Project {
@@ -274,15 +290,20 @@ export const api = {
       globals: Array<{ file: string; status: 'removed' | 'absent' }>
       detached: Array<{ project: string; removed: string[] }>
     }>(`/api/artifacts/${id}`, { method: 'DELETE' }),
-  sessions: (opts: { harness?: SessionHarness; limit?: number; offset?: number } = {}) => {
+  sessions: (opts: { harness?: SessionHarness; project?: string; q?: string; limit?: number; offset?: number } = {}) => {
     const params = new URLSearchParams()
     if (opts.harness) params.set('harness', opts.harness)
+    if (opts.project) params.set('project', opts.project)
+    if (opts.q) params.set('q', opts.q)
     if (opts.limit) params.set('limit', String(opts.limit))
     if (opts.offset) params.set('offset', String(opts.offset))
     const qs = params.toString()
     return request<SessionList>(`/api/sessions${qs ? `?${qs}` : ''}`)
   },
   sessionStarts: () => request<string[]>('/api/sessions/starts'),
+  sessionUsage: () => request<UsageBucket[]>('/api/sessions/usage'),
+  sessionProjects: () => request<string[]>('/api/sessions/projects'),
+  topProjects: () => request<TopProject[]>('/api/sessions/top-projects'),
   session: (id: string, opts: { limit?: number; offset?: number } = {}) => {
     const params = new URLSearchParams()
     if (opts.limit) params.set('limit', String(opts.limit))

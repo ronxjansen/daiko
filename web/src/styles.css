@@ -339,6 +339,61 @@ a.stat-card:hover .stat-label {
   margin-top: 12px;
 }
 
+/* Dashboard pairing: active projects beside recent activity. */
+.panel-columns {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  column-gap: 48px;
+  align-items: start;
+}
+
+.top-projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.top-projects li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.top-project-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.top-project-name {
+  font-weight: 500;
+}
+
+.top-project-marks {
+  display: inline-flex;
+  align-self: center;
+}
+
+.top-project-tokens {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.top-project-path {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .panel-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Tables ---------- */
 
 .table {
@@ -708,6 +763,36 @@ a.stat-card:hover .stat-label {
   border-color: var(--seal-ink);
 }
 
+/* ---------- List filters ---------- */
+
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.filter-bar .search-input {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.filter-select {
+  background: var(--plate);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  padding: 9px 12px;
+  max-width: 40%;
+}
+
+.filter-select:focus-visible {
+  outline-offset: 0;
+  border-color: var(--seal-ink);
+}
+
 /* ---------- Version ledger ---------- */
 
 .version-list {
@@ -869,6 +954,265 @@ a.stat-card:hover .stat-label {
 @media (min-width: 641px) {
   .nav-short {
     display: none;
+  }
+}
+
+/* ---------- Token usage chart ---------- */
+
+.usage-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.usage-head h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin: 0;
+}
+
+.usage-ranges {
+  display: flex;
+  border: 1px solid var(--hairline);
+}
+
+.usage-range {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 0;
+  padding: 3px 9px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--wash), color var(--wash);
+}
+
+.usage-range + .usage-range {
+  border-left: 1px solid var(--hairline);
+}
+
+.usage-range:hover {
+  background: var(--tint);
+  color: var(--ink);
+}
+
+.usage-range.active {
+  background: var(--tint-strong);
+  color: var(--ink);
+}
+
+.usage-plot {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 176px;
+  margin-top: 20px;
+  margin-right: 46px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.usage-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--hairline-soft);
+  pointer-events: none;
+}
+
+.usage-grid span {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  transform: translateY(-50%);
+  padding-left: 7px;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-col {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  transition: background var(--wash);
+}
+
+.usage-col:hover {
+  background: var(--tint);
+}
+
+.usage-seg {
+  min-height: 1px;
+  flex-shrink: 0;
+}
+
+.usage-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.usage-tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  z-index: 5;
+  min-width: 148px;
+  padding: 8px 10px;
+  background: var(--plate);
+  border: 1px solid var(--rule);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.usage-tip-left {
+  transform: translateX(-12px);
+}
+
+.usage-tip-right {
+  transform: translateX(calc(-100% + 12px));
+}
+
+.usage-tip-head {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.usage-tip-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.usage-tip-val {
+  color: var(--ink);
+  font-weight: 500;
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-tip-name {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.usage-tip-total {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.usage-swatch {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.usage-x {
+  display: flex;
+  gap: 2px;
+  margin-top: 5px;
+  margin-right: 46px;
+}
+
+.usage-x span {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.usage-legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.usage-keys {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.usage-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.usage-key-figure {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .usage-plot {
+    height: 132px;
+  }
+
+  .usage-x .usage-x-minor {
+    visibility: hidden;
+  }
+
+  .usage-legend {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }
 

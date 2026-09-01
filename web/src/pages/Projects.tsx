@@ -1,9 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { useState } from 'react'
 import { api, timeAgo } from '../api'
 
 export function Projects() {
+  const [search, setSearch] = useState('')
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects })
+
+  const needle = search.trim().toLowerCase()
+  const visible = projects.data?.filter(
+    (p) => !needle || p.name.toLowerCase().includes(needle) || p.root_path.toLowerCase().includes(needle),
+  )
 
   return (
     <div>
@@ -12,6 +19,13 @@ export function Projects() {
         <p className="muted">
           Register a repo with <code>dai add /path/to/repo</code>.
         </p>
+        <input
+          type="search"
+          className="search-input"
+          placeholder="Search by name or directory…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </header>
 
       {projects.isError && (
@@ -28,6 +42,12 @@ export function Projects() {
         </p>
       )}
 
+      {projects.data && projects.data.length > 0 && visible?.length === 0 && (
+        <p className="empty">
+          <span>No projects match.</span>
+        </p>
+      )}
+
       <table className="table">
         <thead>
           <tr>
@@ -38,7 +58,7 @@ export function Projects() {
           </tr>
         </thead>
         <tbody>
-          {projects.data?.map((p) => (
+          {visible?.map((p) => (
             <tr key={p.id}>
               <td>
                 <Link to="/projects/$projectId" params={{ projectId: p.id }} className="row-link">
