@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { api, timeAgo, type ArtifactType } from '../api'
+import { HarnessMark } from '../components/HarnessIcon'
 
 export function ArtifactList({ type, title }: { type: ArtifactType; title: string }) {
   const artifacts = useQuery({ queryKey: ['artifacts', type], queryFn: () => api.artifacts(type) })
@@ -57,9 +58,7 @@ export function ArtifactList({ type, title }: { type: ArtifactType; title: strin
               </td>
               <td className="col-hide-sm" title={a.rendered_paths.map((r) => r.relPath).join('\n')}>
                 {a.targets.map((h) => (
-                  <span key={h} className={`badge badge-harness-${h}`}>
-                    {h}
-                  </span>
+                  <HarnessMark key={h} id={h} />
                 ))}
               </td>
               <td className="mono">{a.version_count}</td>
