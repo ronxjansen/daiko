@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, harnessLabel, timeAgo, TYPE_LABELS } from '../api'
+import { HarnessIcon } from '../components/HarnessIcon'
 
 const formatBytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`)
 
@@ -239,6 +240,7 @@ export function ArtifactDetail() {
                 return (
                   <li key={h}>
                     <span className="row-link">
+                      <HarnessIcon id={h} />
                       {harnessLabel(h, harnesses.data)}
                       {relPath && <span className="muted mono"> {relPath}</span>}
                     </span>

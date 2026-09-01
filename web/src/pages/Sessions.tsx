@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, formatCost, formatTokens, timeAgo, harnessLabel, type SessionHarness } from '../api'
+import { HarnessIcon, HarnessMark } from '../components/HarnessIcon'
 
 const PAGE_SIZE = 50
 
@@ -39,7 +40,14 @@ export function Sessions() {
                 className={`btn btn-small ${harness === h ? 'btn-primary' : ''}`}
                 onClick={() => pickHarness(h)}
               >
-                {h ? harnessLabel(h, harnesses.data) : 'All'}
+                {h ? (
+                  <>
+                    <HarnessIcon id={h} />
+                    {harnessLabel(h, harnesses.data)}
+                  </>
+                ) : (
+                  'All'
+                )}
               </button>
             ))}
           </div>
@@ -83,7 +91,7 @@ export function Sessions() {
                 </Link>
               </td>
               <td className="col-hide-sm">
-                <span className={`badge badge-harness-${s.harness}`}>{harnessLabel(s.harness, harnesses.data)}</span>
+                <HarnessMark id={s.harness} harnesses={harnesses.data} />
               </td>
               <td className="muted mono col-hide-sm">{s.project_path ? shortenPath(s.project_path) : '–'}</td>
               <td className="mono">{s.message_count}</td>

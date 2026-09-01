@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, formatCost, formatTokens, harnessLabel, type SessionMessage } from '../api'
+import { api, formatCost, formatTokens, type SessionMessage } from '../api'
+import { HarnessBadge } from '../components/HarnessIcon'
 import { shortenPath } from './Sessions'
 
 const PAGE_SIZE = 300
@@ -48,7 +49,7 @@ export function SessionDetail() {
         <div className="header-row">
           <div>
             <h1>
-              <span className={`badge badge-harness-${meta.harness}`}>{harnessLabel(meta.harness, harnesses.data)}</span>{' '}
+              <HarnessBadge id={meta.harness} harnesses={harnesses.data} size={14} />{' '}
               {meta.title ?? (meta.project_path ? shortenPath(meta.project_path) : 'Session')}
             </h1>
             <p className="muted">

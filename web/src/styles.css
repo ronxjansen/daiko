@@ -986,17 +986,41 @@ a.stat-card:hover .stat-label {
   }
 }
 
-/* Harness identity rides in the label text; badges stay in the neutral
-   ledger voice so the seal keeps sole-accent duty and red stays destructive.
-   Matched by prefix so a new harness in the registry needs no CSS. */
+/* Harness identity rides in the monochrome brand mark; badges stay in the
+   neutral ledger voice so the seal keeps sole-accent duty and red stays
+   destructive. Matched by prefix so a new harness in the registry needs no
+   CSS — unknown ids fall back to the generic terminal mark. */
 [class*='badge-harness-'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border-color: var(--rule);
   color: var(--ink-soft);
 }
 
-/* An artifact renders into several harnesses, so its badges sit in a row. */
-[class*='badge-harness-'] + [class*='badge-harness-'] {
-  margin-left: 4px;
+.harness-icon {
+  flex: none;
+  vertical-align: -0.125em;
+}
+
+/* Inline contexts (filter buttons, the Targets list) space the mark themselves;
+   flex badges use gap instead. */
+.btn .harness-icon,
+.row-link .harness-icon {
+  margin-right: 6px;
+}
+
+/* In tables the mark stands alone, no chip chrome. */
+.harness-mark {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  color: var(--ink-soft);
+}
+
+/* An artifact renders into several harnesses, so its marks sit in a row. */
+.harness-mark + .harness-mark {
+  margin-left: 7px;
 }
 
 .pager {
