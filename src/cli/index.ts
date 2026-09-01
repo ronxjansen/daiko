@@ -369,22 +369,123 @@ program
     }
   })
 
-program
+function webuiPidPath(): string {
+  return path.join(daikoHome(), 'webui.pid')
+}
+
+function webuiLogPath(): string {
+  return path.join(daikoHome(), 'webui.log')
+}
+
+/** Pid file holds "<pid>\n<port>". Returns the live daemon, or null (missing/stale pid file). */
+function readDaemon(): { pid: number; port: number } | null {
+  try {
+    const [pidLine, portLine] = fs.readFileSync(webuiPidPath(), 'utf8').split('\n')
+    const pid = Number(pidLine)
+    if (!Number.isInteger(pid) || pid <= 0) return null
+    process.kill(pid, 0)
+    return { pid, port: Number(portLine) || readConfig().port }
+  } catch {
+    return null
+  }
+}
+
+function openBrowser(url: string): void {
+  if (process.platform === 'darwin') {
+    spawn('open', [url], { stdio: 'ignore', detached: true }).unref()
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+async function startWebuiDaemon(port: number, open: boolean): Promise<void> {
+  ensureHome()
+  const running = readDaemon()
+  if (running) {
+    console.log(`Daiko web UI daemon already running at http://localhost:${running.port} (pid ${running.pid})`)
+    if (open) openBrowser(`http://localhost:${running.port}`)
+    return
+  }
+  const url = `http://localhost:${port}`
+  const log = fs.openSync(webuiLogPath(), 'a')
+  const child = spawn(process.execPath, [process.argv[1], 'webui', '--no-open', '--port', String(port)], {
+    detached: true,
+    stdio: ['ignore', log, log],
+  })
+  fs.closeSync(log)
+  fs.writeFileSync(webuiPidPath(), `${child.pid}\n${port}\n`)
+  child.unref()
+  // Give the server a moment to bind so immediate failures (port in use, missing build) surface here.
+  await sleep(700)
+  if (!readDaemon()) {
+    fs.rmSync(webuiPidPath(), { force: true })
+    console.error(`Daemon failed to start; see ${webuiLogPath()}`)
+    process.exitCode = 1
+    return
+  }
+  console.log(`Daiko web UI daemon running at ${url} (pid ${child.pid})`)
+  console.log(`Logs: ${webuiLogPath()} — stop with: dai webui stop`)
+  if (open) openBrowser(url)
+}
+
+async function stopWebuiDaemon(): Promise<void> {
+  const pid = readDaemon()?.pid
+  if (!pid) {
+    fs.rmSync(webuiPidPath(), { force: true })
+    console.log('Daiko web UI daemon is not running.')
+    return
+  }
+  process.kill(pid, 'SIGTERM')
+  let alive = true
+  for (let i = 0; i < 20 && alive; i++) {
+    await sleep(100)
+    try {
+      process.kill(pid, 0)
+    } catch {
+      alive = false
+    }
+  }
+  if (alive) {
+    process.kill(pid, 'SIGKILL')
+    await sleep(100)
+  }
+  fs.rmSync(webuiPidPath(), { force: true })
+  console.log(`Stopped Daiko web UI daemon (pid ${pid}).`)
+}
+
+const webui = program
   .command('webui')
   .alias('serve')
   .description('Start the Daiko web UI')
   .option('-p, --port <port>', 'port to listen on')
+  .option('-d, --daemon', 'run in the background (stop with: dai webui stop)')
   .option('--no-open', 'do not open the browser')
-  .action(async (opts: { port?: string; open: boolean }) => {
+  .action(async (opts: { port?: string; daemon?: boolean; open: boolean }) => {
     const config = readConfig()
     const port = opts.port ? Number(opts.port) : config.port
+    if (opts.daemon) {
+      await startWebuiDaemon(port, opts.open)
+      return
+    }
     const db = openDb(dbPath())
     const actual = await startServer(db, port)
     const url = `http://localhost:${actual}`
     console.log(`Daiko web UI running at ${url}`)
-    if (opts.open && process.platform === 'darwin') {
-      spawn('open', [url], { stdio: 'ignore', detached: true }).unref()
-    }
+    if (opts.open) openBrowser(url)
+  })
+
+webui
+  .command('stop')
+  .description('Stop the background web UI daemon')
+  .action(stopWebuiDaemon)
+
+webui
+  .command('status')
+  .description('Show whether the web UI daemon is running')
+  .action(() => {
+    const daemon = readDaemon()
+    if (daemon) console.log(`Daiko web UI daemon running at http://localhost:${daemon.port} (pid ${daemon.pid})`)
+    else console.log('Daiko web UI daemon is not running.')
   })
 
 program.parseAsync(process.argv).catch((err) => {
