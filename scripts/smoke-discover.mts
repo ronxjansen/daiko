@@ -7,7 +7,6 @@ import path from 'node:path'
 import { openDb } from '../src/db/index.js'
 import { discoverProjects, gitRoot, installedHarnesses } from '../src/core/discover.js'
 import { addProject } from '../src/core/store.js'
-import { parseSelection } from '../src/cli/init.js'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'daiko-discover-'))
 const home = path.join(tmp, 'home')
@@ -82,16 +81,6 @@ try {
     { path: repo1, harnesses: ['claude', 'codex'], git: true, registered: false },
     { path: repo2, harnesses: ['codex', 'cursor'], git: false, registered: true },
   ])
-
-  // Selection syntax used by "dai init".
-  assert.deepStrictEqual(parseSelection('all', 3), [0, 1, 2])
-  assert.deepStrictEqual(parseSelection('', 3), [0, 1, 2])
-  assert.deepStrictEqual(parseSelection('none', 3), [])
-  assert.deepStrictEqual(parseSelection('1,3', 3), [0, 2])
-  assert.deepStrictEqual(parseSelection('2-3 1', 3), [0, 1, 2])
-  assert.strictEqual(parseSelection('0', 3), null)
-  assert.strictEqual(parseSelection('4', 3), null)
-  assert.strictEqual(parseSelection('nope', 3), null)
 
   console.log('smoke-discover: OK')
 } finally {

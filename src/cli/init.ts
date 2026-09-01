@@ -1,11 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createInterface, type Interface } from 'node:readline/promises'
+import { checkbox, confirm, select } from '@inquirer/prompts'
 import { openDb } from '../db/index.js'
 import { discoverProjects, installedHarnesses, type DiscoveredProject } from '../core/discover.js'
 import { dbPath, DEFAULT_PORT, ensureHome, readConfig, writeConfig } from '../core/paths.js'
 import { addGlobalMcpServers, addProject, type AddConflict } from '../core/store.js'
-import { harnessById } from '../core/harnesses/index.js'
+import { HARNESSES, harnessById } from '../core/harnesses/index.js'
 import { importAllSessions, type ImportSummary } from '../core/sessions.js'
 import { detectHookHarnesses, hookHarnessIds, installHooks } from './hook.js'
 
@@ -24,33 +24,10 @@ export interface InitOptions {
 const HOOK_MODES = ['global', 'repo', 'none'] as const
 type HookMode = (typeof HOOK_MODES)[number]
 
-/** "1,3,5-7" | "1 3 5-7" | "all" → 0-based indexes into a list of `max` items; null = unparseable. */
-export function parseSelection(input: string, max: number): number[] | null {
-  const trimmed = input.trim().toLowerCase()
-  if (trimmed === '' || trimmed === 'all' || trimmed === '*') return [...Array(max).keys()]
-  if (trimmed === 'none') return []
-  const picked = new Set<number>()
-  for (const part of trimmed.split(/[\s,]+/)) {
-    const m = /^(\d+)(?:-(\d+))?$/.exec(part)
-    if (!m) return null
-    const from = Number(m[1])
-    const to = m[2] ? Number(m[2]) : from
-    if (from < 1 || to > max || from > to) return null
-    for (let i = from; i <= to; i++) picked.add(i - 1)
-  }
-  return [...picked].sort((a, b) => a - b)
-}
-
-async function confirm(rl: Interface, question: string, def = true): Promise<boolean> {
-  const answer = (await rl.question(`${question} ${def ? '[Y/n]' : '[y/N]'} `)).trim().toLowerCase()
-  if (answer === '') return def
-  return answer === 'y' || answer === 'yes'
-}
-
-const projectLine = (p: DiscoveredProject, index: number, width: number) => {
+const projectLabel = (p: DiscoveredProject) => {
   const labels = p.harnesses.map((h) => harnessById(h)?.label ?? h).join(', ') || 'requested via --repos'
   const marks = [p.git ? null : 'no git', p.registered ? 'already added' : null].filter(Boolean).join(', ')
-  return `  ${String(index + 1).padStart(width)}. ${p.path}  —  ${labels}${marks ? `  (${marks})` : ''}`
+  return `${p.path}  —  ${labels}${marks ? `  (${marks})` : ''}`
 }
 
 function reportConflicts(conflicts: AddConflict[]): void {
@@ -86,17 +63,19 @@ export async function runInit(opts: InitOptions): Promise<void> {
   const detected = installedHarnesses()
   const harnesses = opts.harness ? detected.filter((h) => opts.harness!.includes(h.id)) : detected
   if (harnesses.length === 0) {
-    console.log('No harnesses detected (looked for ~/.claude, ~/.codex, ~/.cursor, ~/.gemini). Nothing to onboard.')
+    const lookedFor = HARNESSES.filter((h) => h.globalConfigDir)
+      .map((h) => `~/${h.globalConfigDir}`)
+      .join(', ')
+    console.log(`No harnesses detected (looked for ${lookedFor}). Nothing to onboard.`)
     return
   }
   console.log(`Detected harnesses: ${harnesses.map((h) => h.label).join(', ')}`)
 
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY && !opts.yes)
-  const rl = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : null
   const db = openDb(dbPath())
   try {
     // 1. Sessions first: their project paths feed discovery, and importing needs no repo.
-    if (opts.sessions && (!rl || (await confirm(rl, 'Import session transcripts from their local stores?')))) {
+    if (opts.sessions && (!interactive || (await confirm({ message: 'Import session transcripts from their local stores?' })))) {
       const total: ImportSummary = { imported: 0, updated: 0, skipped: 0, failed: 0 }
       for (const h of harnesses) {
         const s = await importAllSessions(db, { harness: h.id })
@@ -123,26 +102,19 @@ export async function runInit(opts: InitOptions): Promise<void> {
       console.log('No projects discovered. Register repos individually with: dai add <path>')
       return
     }
-    const width = String(candidates.length).length
-    console.log(`\nDiscovered ${candidates.length} project${candidates.length === 1 ? '' : 's'}:`)
-    candidates.forEach((p, i) => console.log(projectLine(p, i, width)))
+    console.log(`Discovered ${candidates.length} project${candidates.length === 1 ? '' : 's'}.`)
+    if (!interactive) candidates.forEach((p) => console.log(`  ${projectLabel(p)}`))
 
     // 3. Scan + upload each project's config into the store (writes only to ~/.daiko).
     let selected = candidates
     if (opts.scan) {
-      if (rl) {
-        const answer = (await rl.question(`Scan these repos and upload their skills, MCP servers, and agent files? [Y/n/numbers like "1,3-5"] `)).trim()
-        if (answer.toLowerCase() === 'n' || answer.toLowerCase() === 'no') {
-          selected = []
-        } else if (!['', 'y', 'yes'].includes(answer.toLowerCase())) {
-          const picked = parseSelection(answer, candidates.length)
-          if (!picked) {
-            console.error(`Could not parse "${answer}"; skipping the scan step.`)
-            selected = []
-          } else {
-            selected = picked.map((i) => candidates[i])
-          }
-        }
+      if (interactive) {
+        selected = await checkbox({
+          message: 'Repos to scan and upload (skills, MCP servers, agent files)',
+          choices: candidates.map((p) => ({ value: p, name: projectLabel(p), checked: true })),
+          pageSize: 15,
+          loop: false,
+        })
       }
       let added = 0
       let updated = 0
@@ -167,13 +139,19 @@ export async function runInit(opts: InitOptions): Promise<void> {
     // default: one config per harness under ~, covers every repo, nothing to commit.
     const hookable = detectHookHarnesses().filter((id) => wantedIds.has(id))
     let mode: HookMode = (opts.hooks as HookMode) ?? 'none'
-    if (rl && !opts.hooks && hookable.length > 0) {
-      console.log('\nInstall hooks? New sessions then auto-sync artifacts and capture their transcripts.')
-      console.log('  1. global — one config per harness under ~ (recommended; nothing to commit)')
-      console.log(`  2. per-repo — writes hook config files into each of the ${selected.length} selected repos (commit them)`)
-      console.log('  3. none')
-      const answer = (await rl.question('Choice [1]: ')).trim()
-      mode = answer === '2' || answer === 'repo' ? 'repo' : answer === '3' || answer === 'none' || answer.toLowerCase() === 'n' ? 'none' : 'global'
+    if (interactive && !opts.hooks && hookable.length > 0) {
+      mode = await select<HookMode>({
+        message: 'Install hooks? New sessions then auto-sync artifacts and capture their transcripts.',
+        choices: [
+          { value: 'global', name: 'global — one config per harness under ~ (recommended; nothing to commit)' },
+          {
+            value: 'repo',
+            name: `per-repo — write hook config files into each of the ${selected.length} selected repo${selected.length === 1 ? '' : 's'} (commit them)`,
+          },
+          { value: 'none', name: 'none' },
+        ],
+        default: 'global',
+      })
     }
     if (mode !== 'none' && hookable.length === 0) {
       console.log(`No hook-capable harness selected (${hookHarnessIds.join(', ')}); skipping hooks.`)
@@ -185,7 +163,12 @@ export async function runInit(opts: InitOptions): Promise<void> {
     } else if (mode === 'repo' && selected.length === 0) {
       console.log('No repos selected; skipping per-repo hooks. Install later with: dai hook <repo>')
     } else if (mode === 'repo') {
-      if (rl && !(await confirm(rl, `This writes hook config files into ${selected.length} repo${selected.length === 1 ? '' : 's'} (.claude/settings.json, .codex/hooks.json, ...). Continue?`))) {
+      const proceed =
+        !interactive ||
+        (await confirm({
+          message: `This writes hook config files into ${selected.length} repo${selected.length === 1 ? '' : 's'} (.claude/settings.json, .codex/hooks.json, ...). Continue?`,
+        }))
+      if (!proceed) {
         console.log('Skipped hooks. Install later with: dai hook <repo>  (or dai hook -g)')
       } else {
         for (const p of selected) {
@@ -200,8 +183,14 @@ export async function runInit(opts: InitOptions): Promise<void> {
     }
 
     console.log('\nDone. Explore everything with: dai webui')
+  } catch (err) {
+    // Ctrl-C inside a prompt is a cancel, not a crash.
+    if (err instanceof Error && err.name === 'ExitPromptError') {
+      console.log('Cancelled.')
+      return
+    }
+    throw err
   } finally {
-    rl?.close()
     await db.destroy()
   }
 }
