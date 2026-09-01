@@ -7,7 +7,6 @@ export interface ParsedMessage {
   toolName: string | null
   toolUseId: string | null
   timestamp: string | null
-  raw: string
 }
 
 export interface ParsedSession {

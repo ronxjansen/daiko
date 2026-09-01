@@ -20,20 +20,19 @@ export function parseGeminiSession(file: string): ParsedSession | null {
   const messages: ParsedMessage[] = []
   for (const m of doc.messages) {
     const ts = typeof m.timestamp === 'string' ? m.timestamp : null
-    const raw = JSON.stringify(m)
 
     if (m.type === 'user') {
-      messages.push({ role: 'user', kind: 'text', content: flattenContent(m.content), toolName: null, toolUseId: null, timestamp: ts, raw })
+      messages.push({ role: 'user', kind: 'text', content: flattenContent(m.content), toolName: null, toolUseId: null, timestamp: ts })
       continue
     }
     if (m.type !== 'gemini') {
-      messages.push({ role: 'system', kind: 'system', content: flattenContent(m.content), toolName: null, toolUseId: null, timestamp: ts, raw })
+      messages.push({ role: 'system', kind: 'system', content: flattenContent(m.content), toolName: null, toolUseId: null, timestamp: ts })
       continue
     }
 
     for (const t of Array.isArray(m.thoughts) ? m.thoughts : []) {
       const text = [t?.subject, t?.description].filter(Boolean).join(': ')
-      messages.push({ role: 'assistant', kind: 'thinking', content: text, toolName: null, toolUseId: null, timestamp: ts, raw: JSON.stringify(t) })
+      messages.push({ role: 'assistant', kind: 'thinking', content: text, toolName: null, toolUseId: null, timestamp: ts })
     }
     for (const call of Array.isArray(m.toolCalls) ? m.toolCalls : []) {
       messages.push({
@@ -43,7 +42,6 @@ export function parseGeminiSession(file: string): ParsedSession | null {
         toolName: call?.name ?? null,
         toolUseId: call?.id ?? null,
         timestamp: ts,
-        raw: JSON.stringify(call),
       })
       if (call?.result !== undefined) {
         messages.push({
@@ -53,13 +51,12 @@ export function parseGeminiSession(file: string): ParsedSession | null {
           toolName: call?.name ?? null,
           toolUseId: call?.id ?? null,
           timestamp: ts,
-          raw: JSON.stringify(call),
         })
       }
     }
     const text = flattenContent(m.content)
     if (text) {
-      messages.push({ role: 'assistant', kind: 'text', content: text, toolName: null, toolUseId: null, timestamp: ts, raw })
+      messages.push({ role: 'assistant', kind: 'text', content: text, toolName: null, toolUseId: null, timestamp: ts })
     }
   }
 

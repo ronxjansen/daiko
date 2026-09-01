@@ -69,7 +69,6 @@ CREATE TABLE IF NOT EXISTS messages (
   tool_name TEXT,
   tool_use_id TEXT,
   timestamp TEXT,
-  raw TEXT NOT NULL,
   UNIQUE(session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_harness ON sessions(harness, started_at);
@@ -106,12 +105,19 @@ function migrateArtifactsNullableProjectId(sqlite: SQLite.Database): void {
   sqlite.pragma('foreign_keys = ON')
 }
 
+/** Drop the messages.raw column from older DBs: it duplicated every transcript and nothing read it. */
+function migrateDropMessagesRaw(sqlite: SQLite.Database): void {
+  const columns = sqlite.pragma(`table_info('messages')`) as Array<{ name: string }>
+  if (columns.some((c) => c.name === 'raw')) sqlite.exec('ALTER TABLE messages DROP COLUMN raw')
+}
+
 export function openDb(dbPath: string): Kysely<DB> {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
   const sqlite = new SQLite(dbPath)
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
   migrateArtifactsNullableProjectId(sqlite)
+  migrateDropMessagesRaw(sqlite)
   sqlite.exec(DDL)
   return new Kysely<DB>({ dialect: new SqliteDialect({ database: sqlite }) })
 }

@@ -34,7 +34,6 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
     }
     if (entry.type !== 'response_item' || !entry.payload) continue
     const p = entry.payload
-    const raw = JSON.stringify(entry)
 
     if (p.type === 'message') {
       const role: MessageRole = p.role === 'assistant' ? 'assistant' : p.role === 'user' ? 'user' : 'system'
@@ -45,12 +44,11 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
         toolName: null,
         toolUseId: null,
         timestamp: ts,
-        raw,
       })
     } else if (p.type === 'reasoning') {
       // Codex encrypts raw reasoning; the readable part is the summary blocks.
       const summary = Array.isArray(p.summary) ? p.summary.map((s: any) => s?.text ?? '').filter(Boolean).join('\n') : ''
-      messages.push({ role: 'assistant', kind: 'thinking', content: summary, toolName: null, toolUseId: null, timestamp: ts, raw })
+      messages.push({ role: 'assistant', kind: 'thinking', content: summary, toolName: null, toolUseId: null, timestamp: ts })
     } else if (p.type === 'function_call' || p.type === 'custom_tool_call' || p.type === 'web_search_call') {
       messages.push({
         role: 'assistant',
@@ -59,7 +57,6 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
         toolName: p.name ?? p.type,
         toolUseId: p.call_id ?? p.id ?? null,
         timestamp: ts,
-        raw,
       })
     } else if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
       messages.push({
@@ -69,7 +66,6 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
         toolName: null,
         toolUseId: p.call_id ?? null,
         timestamp: ts,
-        raw,
       })
     }
   }

@@ -1,11 +1,11 @@
-// Smoke test for global artifact deletion. Run: npx tsx .smoke-delete.mts
+// Smoke test for global artifact deletion. Run: npm test
 import assert from 'node:assert'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openDb } from './src/db/index.js'
-import { addGlobalMcpServers, addProject, attachArtifact, deleteArtifact, syncProject } from './src/core/store.js'
-import { scanGlobalMcpServers } from './src/core/scan.js'
+import { openDb } from '../src/db/index.js'
+import { addGlobalMcpServers, addProject, attachArtifact, deleteArtifact, syncProject } from '../src/core/store.js'
+import { scanGlobalMcpServers } from '../src/core/scan.js'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'daiko-smoke-'))
 const home = path.join(tmp, 'home')

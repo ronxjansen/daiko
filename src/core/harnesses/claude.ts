@@ -18,10 +18,7 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
   let startedAt: string | null = null
   let endedAt: string | null = null
   const messages: ParsedMessage[] = []
-
-  const push = (msg: Omit<ParsedMessage, 'raw'>, entry: Record<string, any>) => {
-    messages.push({ ...msg, raw: JSON.stringify(entry) })
-  }
+  const push = (msg: ParsedMessage) => messages.push(msg)
 
   for (const entry of entries) {
     cwd ??= typeof entry.cwd === 'string' ? entry.cwd : null
@@ -37,67 +34,49 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
     if (entry.type === 'user' && entry.message) {
       const content = entry.message.content
       if (typeof content === 'string') {
-        push({ role: 'user', kind: 'text', content, toolName: null, toolUseId: null, timestamp: ts }, entry)
+        push({ role: 'user', kind: 'text', content, toolName: null, toolUseId: null, timestamp: ts })
       } else if (Array.isArray(content)) {
         for (const block of content) {
           if (block?.type === 'tool_result') {
-            push(
-              {
-                role: 'tool',
-                kind: 'tool_result',
-                content: flattenContent(block.content),
-                toolName: null,
-                toolUseId: block.tool_use_id ?? null,
-                timestamp: ts,
-              },
-              entry,
-            )
+            push({
+              role: 'tool',
+              kind: 'tool_result',
+              content: flattenContent(block.content),
+              toolName: null,
+              toolUseId: block.tool_use_id ?? null,
+              timestamp: ts,
+            })
           } else if (block?.type === 'text' || typeof block === 'string') {
-            push(
-              { role: 'user', kind: 'text', content: flattenContent([block]), toolName: null, toolUseId: null, timestamp: ts },
-              entry,
-            )
+            push({ role: 'user', kind: 'text', content: flattenContent([block]), toolName: null, toolUseId: null, timestamp: ts })
           }
         }
       }
     } else if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
       for (const block of entry.message.content) {
         if (block?.type === 'thinking') {
-          push(
-            { role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts },
-            entry,
-          )
+          push({ role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts })
         } else if (block?.type === 'text') {
-          push(
-            { role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts },
-            entry,
-          )
+          push({ role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts })
         } else if (block?.type === 'tool_use') {
-          push(
-            {
-              role: 'assistant',
-              kind: 'tool_use',
-              content: JSON.stringify(block.input ?? {}),
-              toolName: block.name ?? null,
-              toolUseId: block.id ?? null,
-              timestamp: ts,
-            },
-            entry,
-          )
+          push({
+            role: 'assistant',
+            kind: 'tool_use',
+            content: JSON.stringify(block.input ?? {}),
+            toolName: block.name ?? null,
+            toolUseId: block.id ?? null,
+            timestamp: ts,
+          })
         }
       }
     } else if (entry.type === 'system') {
-      push(
-        {
-          role: 'system',
-          kind: 'system',
-          content: typeof entry.content === 'string' ? entry.content : entry.subtype ?? null,
-          toolName: null,
-          toolUseId: null,
-          timestamp: ts,
-        },
-        entry,
-      )
+      push({
+        role: 'system',
+        kind: 'system',
+        content: typeof entry.content === 'string' ? entry.content : entry.subtype ?? null,
+        toolName: null,
+        toolUseId: null,
+        timestamp: ts,
+      })
     }
   }
 

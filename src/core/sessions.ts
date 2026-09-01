@@ -100,7 +100,6 @@ export async function importSessionFile(
       tool_name: m.toolName,
       tool_use_id: m.toolUseId,
       timestamp: m.timestamp,
-      raw: m.raw,
     }))
     for (let i = 0; i < rows.length; i += 50) {
       await trx.insertInto('messages').values(rows.slice(i, i + 50)).execute()

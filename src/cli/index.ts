@@ -1,11 +1,12 @@
 import { Command } from 'commander'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { openDb } from '../db/index.js'
 import { daikoHome, dbPath, ensureHome, readConfig, writeConfig, DEFAULT_PORT } from '../core/paths.js'
-import { addGlobalMcpServers, addProject, attachArtifact, deleteArtifact, detachArtifact, syncProject } from '../core/store.js'
+import { addGlobalMcpServers, addProject, attachArtifact, deleteArtifact, detachArtifact, linkedArtifacts, syncProject } from '../core/store.js'
 import { sessionHarnesses } from '../core/harnesses/index.js'
 import { importAllSessions, importSessionFile } from '../core/sessions.js'
 import { installHook } from './hook.js'
@@ -24,9 +25,12 @@ function resolveTranscriptPath(payload: { transcript_path?: string; session_id?:
   return fs.existsSync(derived) ? derived : null
 }
 
+// Works from both src/cli (dev via tsx) and dist/cli (built): package.json is two levels up.
+const { version } = createRequire(import.meta.url)('../../package.json') as { version: string }
+
 const program = new Command()
 
-program.name('dai').description('Daiko: sync MCP servers, skills, and agent files across agents and projects').version('0.1.0')
+program.name('dai').description('Daiko: sync MCP servers, skills, and agent files across agents and projects').version(version)
 
 program
   .command('init')
@@ -188,14 +192,7 @@ program
         return
       }
       // Only consider artifacts actually shared into this project.
-      const linked = await db
-        .selectFrom('project_artifacts')
-        .innerJoin('artifacts', 'artifacts.id', 'project_artifacts.artifact_id')
-        .leftJoin('projects', 'projects.id', 'artifacts.project_id')
-        .selectAll('artifacts')
-        .select('projects.name as project_name')
-        .where('project_artifacts.project_id', '=', project.id)
-        .execute()
+      const linked = await linkedArtifacts(db, project.id)
       const matches = linked.filter(
         (a) => (a.name === name || a.name.includes(name)) && (!opts.type || a.type === opts.type),
       )

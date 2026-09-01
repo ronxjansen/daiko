@@ -71,7 +71,6 @@ export interface MessagesTable {
   tool_name: string | null
   tool_use_id: string | null
   timestamp: string | null
-  raw: string
 }
 
 export interface DB {

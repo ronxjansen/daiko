@@ -82,12 +82,14 @@ async function upsertArtifact(db: Kysely<DB>, projectId: string | null, s: Scann
   return versionArtifact(db, existing, s.content, 'add')
 }
 
-/** Artifacts shared into a project from elsewhere (via project_artifacts links). */
-async function linkedArtifacts(db: Kysely<DB>, projectId: string): Promise<ArtifactsTable[]> {
+/** Artifacts shared into a project from elsewhere (via project_artifacts links), with the owner project's name. */
+export async function linkedArtifacts(db: Kysely<DB>, projectId: string) {
   return db
     .selectFrom('project_artifacts')
     .innerJoin('artifacts', 'artifacts.id', 'project_artifacts.artifact_id')
+    .leftJoin('projects', 'projects.id', 'artifacts.project_id')
     .selectAll('artifacts')
+    .select('projects.name as project_name')
     .where('project_artifacts.project_id', '=', projectId)
     .execute()
 }
@@ -178,8 +180,7 @@ export async function syncProject(db: Kysely<DB>, root: string): Promise<SyncSum
       const target = path.join(abs, relPath)
       const prev = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null
       if (prev === version.content) continue
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.writeFileSync(target, version.content)
+      writeFileAtomic(target, version.content)
       written.push(relPath)
     }
   }
@@ -199,8 +200,7 @@ export async function syncProject(db: Kysely<DB>, root: string): Promise<SyncSum
     const merged = { ...existing, mcpServers: { ...existingServers, ...servers } }
     const out = JSON.stringify(merged, null, 2) + '\n'
     if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== out) {
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.writeFileSync(target, out)
+      writeFileAtomic(target, out)
       written.push(relPath)
     }
   }
