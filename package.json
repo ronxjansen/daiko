@@ -45,7 +45,7 @@
     "uninstall:global": "npm uninstall -g daiko",
     "dev:web": "npm run dev -w web",
     "dev": "tsx src/cli/index.ts",
-    "test": "tsx scripts/smoke-delete.mts && tsx scripts/smoke-usage.mts && tsx scripts/smoke-sync.mts && tsx scripts/smoke-skills.mts && tsx scripts/smoke-discover.mts"
+    "test": "tsx scripts/smoke-delete.mts && tsx scripts/smoke-usage.mts && tsx scripts/smoke-sync.mts && tsx scripts/smoke-skills.mts && tsx scripts/smoke-discover.mts && tsx scripts/smoke-db-sessions.mts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

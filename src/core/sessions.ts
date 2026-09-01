@@ -40,7 +40,7 @@ export interface SessionSource {
 /** Well-known local session stores of every registered harness. */
 export function discoverSessionFiles(home = os.homedir()): SessionSource[] {
   return sessionHarnesses().flatMap((h) =>
-    h.discoverSessionFiles!(home).map((file) => ({ harness: h.id, file })),
+    (h.discoverSessionFiles?.(home) ?? []).map((file) => ({ harness: h.id, file })),
   )
 }
 
@@ -56,37 +56,17 @@ export interface ImportSummary {
 }
 
 /**
- * Import one session file. Skips when the file is unchanged since the last import
- * (mtime + size), unless force is set. Messages are replaced wholesale on change —
- * transcripts are append-only, so a full rewrite keeps import idempotent.
+ * Upsert one parsed session, replacing its messages wholesale — transcripts are
+ * append-only, so a full rewrite keeps import idempotent. `size` and `mtimeMs` are the
+ * change-detection pair recorded for the next skip check (a file stat for file-backed
+ * sessions, an adapter-chosen stand-in for database-backed ones).
  */
-export async function importSessionFile(
+async function upsertSession(
   db: Kysely<DB>,
-  source: SessionSource,
-  opts: { force?: boolean } = {},
-): Promise<'imported' | 'updated' | 'skipped' | 'failed'> {
-  let stat: fs.Stats
-  try {
-    stat = fs.statSync(source.file)
-  } catch {
-    return 'failed'
-  }
-
-  const existing = await db
-    .selectFrom('sessions')
-    .select(['id', 'source_mtime_ms', 'source_size'])
-    .where('harness', '=', source.harness)
-    .where('source_path', '=', source.file)
-    .executeTakeFirst()
-
-  if (existing && !opts.force && existing.source_mtime_ms === Math.floor(stat.mtimeMs) && existing.source_size === stat.size) {
-    return 'skipped'
-  }
-
-  // No parsed session = metadata-only or empty transcript, not an error.
-  const parsed = parseSessionFile(source)
-  if (!parsed) return 'skipped'
-
+  parsed: ParsedSession,
+  existing: { id: string } | undefined,
+  stamp: { size: number; mtimeMs: number },
+): Promise<'imported' | 'updated'> {
   const sessionId = existing?.id ?? randomUUID()
   const rollup = sessionRollup(parsed)
   const sessionRow = {
@@ -98,8 +78,8 @@ export async function importSessionFile(
     started_at: parsed.startedAt,
     ended_at: parsed.endedAt,
     message_count: parsed.messages.length,
-    source_size: stat.size,
-    source_mtime_ms: Math.floor(stat.mtimeMs),
+    source_size: stamp.size,
+    source_mtime_ms: Math.floor(stamp.mtimeMs),
     model: rollup.model,
     input_tokens: rollup.usage?.input ?? null,
     output_tokens: rollup.usage?.output ?? null,
@@ -144,6 +124,70 @@ export async function importSessionFile(
   return isNew ? 'imported' : 'updated'
 }
 
+/** The stored change-detection stamp for a session, keyed by its unique source path. */
+async function findExisting(db: Kysely<DB>, harness: string, sourcePath: string) {
+  return db
+    .selectFrom('sessions')
+    .select(['id', 'source_mtime_ms', 'source_size'])
+    .where('harness', '=', harness)
+    .where('source_path', '=', sourcePath)
+    .executeTakeFirst()
+}
+
+/**
+ * Import one session file. Skips when the file is unchanged since the last import
+ * (mtime + size), unless force is set.
+ */
+export async function importSessionFile(
+  db: Kysely<DB>,
+  source: SessionSource,
+  opts: { force?: boolean } = {},
+): Promise<'imported' | 'updated' | 'skipped' | 'failed'> {
+  let stat: fs.Stats
+  try {
+    stat = fs.statSync(source.file)
+  } catch {
+    return 'failed'
+  }
+
+  const existing = await findExisting(db, source.harness, source.file)
+  if (existing && !opts.force && existing.source_mtime_ms === Math.floor(stat.mtimeMs) && existing.source_size === stat.size) {
+    return 'skipped'
+  }
+
+  // No parsed session = metadata-only or empty transcript, not an error.
+  const parsed = parseSessionFile(source)
+  if (!parsed) return 'skipped'
+
+  return upsertSession(db, parsed, existing, stat)
+}
+
+/**
+ * Import every session of the harnesses that keep a shared database store (goose,
+ * Hermes) rather than one transcript file per session. The adapter already parsed each
+ * session, so the unchanged check only saves the DB write, not the read.
+ */
+export async function importDbSessions(
+  db: Kysely<DB>,
+  opts: { harness?: string; force?: boolean } = {},
+  home = os.homedir(),
+): Promise<ImportSummary> {
+  const summary: ImportSummary = { imported: 0, updated: 0, skipped: 0, failed: 0 }
+  for (const h of sessionHarnesses()) {
+    if (!h.discoverDbSessions) continue
+    if (opts.harness && h.id !== opts.harness) continue
+    for (const session of h.discoverDbSessions(home)) {
+      const existing = await findExisting(db, session.harness, session.sourcePath)
+      if (existing && !opts.force && existing.source_mtime_ms === Math.floor(session.mtimeMs) && existing.source_size === session.size) {
+        summary.skipped++
+        continue
+      }
+      summary[await upsertSession(db, session, existing, session)]++
+    }
+  }
+  return summary
+}
+
 /** Import every session found in the default local stores of all registered harnesses. */
 export async function importAllSessions(
   db: Kysely<DB>,
@@ -155,5 +199,10 @@ export async function importAllSessions(
     const result = await importSessionFile(db, source, opts)
     summary[result]++
   }
+  const fromDb = await importDbSessions(db, opts)
+  summary.imported += fromDb.imported
+  summary.updated += fromDb.updated
+  summary.skipped += fromDb.skipped
+  summary.failed += fromDb.failed
   return summary
 }

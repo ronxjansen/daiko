@@ -1,7 +1,29 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import SQLite from 'better-sqlite3'
 import type { GlobalRemoveResult, HarnessLayout, ScannedArtifact, SkillFile } from './types.js'
 import { INSTRUCTIONS_NAME } from './types.js'
+
+/**
+ * Run a query function over another harness's SQLite store, read-only, and swallow every
+ * failure into the fallback: a missing db, a locked file, or a schema from a different
+ * version of the harness must never break scanning or import.
+ */
+export function readSqlite<T>(file: string, fallback: T, fn: (db: SQLite.Database) => T): T {
+  let db: SQLite.Database
+  try {
+    db = new SQLite(file, { readonly: true, fileMustExist: true })
+  } catch {
+    return fallback
+  }
+  try {
+    return fn(db)
+  } catch {
+    return fallback
+  } finally {
+    db.close()
+  }
+}
 
 export function readJsonl(file: string): Array<Record<string, any>> {
   const out: Array<Record<string, any>> = []
