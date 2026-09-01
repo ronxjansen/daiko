@@ -18,6 +18,8 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
   let cwd: string | null = null
   let startedAt: string | null = null
   let endedAt: string | null = null
+  let model: string | null = null
+  let totalUsage: ParsedSession['usage'] = null
   const messages: ParsedMessage[] = []
 
   for (const entry of entries) {
@@ -30,6 +32,25 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
     if (entry.type === 'session_meta' && entry.payload) {
       sessionId = entry.payload.id ?? entry.payload.session_id ?? null
       cwd = entry.payload.cwd ?? null
+      continue
+    }
+    if (entry.type === 'turn_context' && typeof entry.payload?.model === 'string') {
+      model = entry.payload.model
+      continue
+    }
+    // Codex only reports usage per turn, and token_count events repeat within a
+    // turn (summing last_token_usage overcounts) — keep the cumulative snapshot,
+    // whose input_tokens figure includes the cached share.
+    if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+      const t = entry.payload.info?.total_token_usage
+      if (t) {
+        totalUsage = {
+          input: Math.max(0, (t.input_tokens ?? 0) - (t.cached_input_tokens ?? 0)),
+          output: t.output_tokens ?? 0,
+          cacheRead: t.cached_input_tokens ?? 0,
+          cacheWrite: t.cache_write_input_tokens ?? 0,
+        }
+      }
       continue
     }
     if (entry.type !== 'response_item' || !entry.payload) continue
@@ -80,6 +101,8 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
     startedAt,
     endedAt,
     messages,
+    model,
+    usage: totalUsage,
   }
 }
 

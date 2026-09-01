@@ -7,9 +7,31 @@ import { Hono } from 'hono'
 import type { Kysely } from 'kysely'
 import type { DB } from '../db/schema.js'
 import { HARNESSES } from '../core/harnesses/index.js'
+import { estimateCostUsd } from '../core/pricing.js'
 import { attachArtifact, deleteArtifact, detachArtifact, hashOf, syncProject } from '../core/store.js'
 
 const now = () => new Date().toISOString()
+
+/** Derived usage fields for a session row: grand total + estimated USD cost (null when untracked). */
+function usageFields(s: {
+  model: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
+}): { total_tokens: number | null; estimated_cost_usd: number | null } {
+  if (s.input_tokens === null) return { total_tokens: null, estimated_cost_usd: null }
+  const usage = {
+    input: s.input_tokens,
+    output: s.output_tokens ?? 0,
+    cacheRead: s.cache_read_tokens ?? 0,
+    cacheWrite: s.cache_write_tokens ?? 0,
+  }
+  return {
+    total_tokens: usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
+    estimated_cost_usd: estimateCostUsd(s.model, usage),
+  }
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -316,7 +338,7 @@ export function createApp(db: Kysely<DB>): Hono {
     }
     const [rows, total] = await Promise.all([query.execute(), countQuery.executeTakeFirstOrThrow()])
     return c.json({
-      sessions: rows.map((s) => ({ ...s, preview: s.preview ? s.preview.slice(0, 200) : null })),
+      sessions: rows.map((s) => ({ ...s, ...usageFields(s), preview: s.preview ? s.preview.slice(0, 200) : null })),
       total: total.n,
     })
   })
@@ -328,13 +350,26 @@ export function createApp(db: Kysely<DB>): Hono {
     const offset = Number(c.req.query('offset')) || 0
     const messages = await db
       .selectFrom('messages')
-      .select(['id', 'seq', 'role', 'kind', 'content', 'tool_name', 'tool_use_id', 'timestamp'])
+      .select(['id', 'seq', 'role', 'kind', 'content', 'tool_name', 'tool_use_id', 'timestamp', 'model', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens'])
       .where('session_id', '=', session.id)
       .orderBy('seq')
       .limit(limit)
       .offset(offset)
       .execute()
-    return c.json({ ...session, messages, message_offset: offset, message_limit: limit })
+    // Per-request cost alongside the raw counts, so pricing knowledge stays server-side.
+    const withCost = messages.map((m) => ({
+      ...m,
+      estimated_cost_usd:
+        m.input_tokens === null
+          ? null
+          : estimateCostUsd(m.model ?? session.model, {
+              input: m.input_tokens,
+              output: m.output_tokens ?? 0,
+              cacheRead: m.cache_read_tokens ?? 0,
+              cacheWrite: m.cache_write_tokens ?? 0,
+            }),
+    }))
+    return c.json({ ...session, ...usageFields(session), messages: withCost, message_offset: offset, message_limit: limit })
   })
 
   app.delete('/api/sessions/:id', async (c) => {

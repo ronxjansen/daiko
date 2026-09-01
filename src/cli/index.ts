@@ -7,6 +7,7 @@ import path from 'node:path'
 import { openDb } from '../db/index.js'
 import { daikoHome, dbPath, ensureHome, readConfig, writeConfig, DEFAULT_PORT } from '../core/paths.js'
 import { addGlobalMcpServers, addProject, attachArtifact, deleteArtifact, detachArtifact, linkedArtifacts, syncProject } from '../core/store.js'
+import { estimateCostUsd, formatTokens } from '../core/pricing.js'
 import { sessionHarnesses } from '../core/harnesses/index.js'
 import { importAllSessions, importSessionFile } from '../core/sessions.js'
 import { installHook } from './hook.js'
@@ -315,7 +316,16 @@ program
         const when = (s.started_at ?? '').slice(0, 16).replace('T', ' ')
         const where = s.project_path ?? '-'
         const label = s.title ?? s.external_id
-        console.log(`${when}  ${s.harness.padEnd(7)} ${String(s.message_count).padStart(5)} msgs  ${where}  ${label}`)
+        const usage =
+          s.input_tokens !== null
+            ? { input: s.input_tokens, output: s.output_tokens ?? 0, cacheRead: s.cache_read_tokens ?? 0, cacheWrite: s.cache_write_tokens ?? 0 }
+            : null
+        const tokens = usage ? formatTokens(usage.input + usage.output + usage.cacheRead + usage.cacheWrite) : '-'
+        const cost = estimateCostUsd(s.model, usage)
+        const costLabel = cost !== null ? `$${cost.toFixed(2)}` : '-'
+        console.log(
+          `${when}  ${s.harness.padEnd(7)} ${String(s.message_count).padStart(5)} msgs  ${tokens.padStart(7)} tok  ${costLabel.padStart(7)}  ${(s.model ?? '-').padEnd(18)} ${where}  ${label}`,
+        )
       }
     } finally {
       await db.destroy()

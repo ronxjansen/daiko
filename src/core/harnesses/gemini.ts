@@ -30,12 +30,29 @@ export function parseGeminiSession(file: string): ParsedSession | null {
       continue
     }
 
+    // Newer Gemini CLI records per-response model + tokens ({input, output, cached,
+    // thoughts, tool, total}); input includes cached, thoughts/tool are billed as
+    // output/input respectively. Attach to the first message of this response.
+    const model = typeof m.model === 'string' ? m.model : null
+    let usage: ParsedMessage['usage'] = m.tokens
+      ? {
+          input: Math.max(0, (m.tokens.input ?? 0) - (m.tokens.cached ?? 0)) + (m.tokens.tool ?? 0),
+          output: (m.tokens.output ?? 0) + (m.tokens.thoughts ?? 0),
+          cacheRead: m.tokens.cached ?? 0,
+          cacheWrite: 0,
+        }
+      : null
+    const pushAssistant = (msg: ParsedMessage) => {
+      messages.push({ ...msg, model, usage })
+      usage = null
+    }
+
     for (const t of Array.isArray(m.thoughts) ? m.thoughts : []) {
       const text = [t?.subject, t?.description].filter(Boolean).join(': ')
-      messages.push({ role: 'assistant', kind: 'thinking', content: text, toolName: null, toolUseId: null, timestamp: ts })
+      pushAssistant({ role: 'assistant', kind: 'thinking', content: text, toolName: null, toolUseId: null, timestamp: ts })
     }
     for (const call of Array.isArray(m.toolCalls) ? m.toolCalls : []) {
-      messages.push({
+      pushAssistant({
         role: 'assistant',
         kind: 'tool_use',
         content: JSON.stringify(call?.args ?? {}),
@@ -56,7 +73,7 @@ export function parseGeminiSession(file: string): ParsedSession | null {
     }
     const text = flattenContent(m.content)
     if (text) {
-      messages.push({ role: 'assistant', kind: 'text', content: text, toolName: null, toolUseId: null, timestamp: ts })
+      pushAssistant({ role: 'assistant', kind: 'text', content: text, toolName: null, toolUseId: null, timestamp: ts })
     }
   }
 

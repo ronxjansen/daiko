@@ -57,6 +57,13 @@ export interface SessionsTable {
   message_count: number
   source_size: number
   source_mtime_ms: number
+  /** Primary model of the session (last non-synthetic model seen); null when the transcript doesn't record one. */
+  model: string | null
+  /** Session token totals; input_tokens is the non-cached share (see TokenUsage). All null = harness reported no usage. */
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
   created_at: string
   updated_at: string
 }
@@ -71,6 +78,12 @@ export interface MessagesTable {
   tool_name: string | null
   tool_use_id: string | null
   timestamp: string | null
+  model: string | null
+  /** Tokens of the API request that produced this message; set on one message per request, null elsewhere. */
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
 }
 
 export interface DB {

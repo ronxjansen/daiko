@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, timeAgo, harnessLabel, type SessionHarness } from '../api'
+import { api, formatCost, formatTokens, timeAgo, harnessLabel, type SessionHarness } from '../api'
 
 const PAGE_SIZE = 50
 
@@ -61,6 +61,8 @@ export function Sessions() {
             <th className="col-hide-sm">Harness</th>
             <th className="col-hide-sm">Project</th>
             <th>Messages</th>
+            <th className="col-hide-sm">Tokens</th>
+            <th className="col-hide-sm">Est. cost</th>
             <th>Started</th>
           </tr>
         </thead>
@@ -77,6 +79,10 @@ export function Sessions() {
               </td>
               <td className="muted mono col-hide-sm">{s.project_path ? shortenPath(s.project_path) : '–'}</td>
               <td className="mono">{s.message_count}</td>
+              <td className="mono col-hide-sm" title={s.model ?? undefined}>
+                {s.total_tokens !== null ? formatTokens(s.total_tokens) : '–'}
+              </td>
+              <td className="mono col-hide-sm">{s.estimated_cost_usd !== null ? formatCost(s.estimated_cost_usd) : '–'}</td>
               <td className="muted mono">{s.started_at ? timeAgo(s.started_at) : '–'}</td>
             </tr>
           ))}

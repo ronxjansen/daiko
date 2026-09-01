@@ -19,6 +19,9 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
   let endedAt: string | null = null
   const messages: ParsedMessage[] = []
   const push = (msg: ParsedMessage) => messages.push(msg)
+  // One API response spans multiple JSONL lines (one per content block), each
+  // repeating the same message.usage — attach it only once per response id.
+  const countedRequests = new Set<string>()
 
   for (const entry of entries) {
     cwd ??= typeof entry.cwd === 'string' ? entry.cwd : null
@@ -52,11 +55,25 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
         }
       }
     } else if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
+      const rawModel = typeof entry.message.model === 'string' ? entry.message.model : null
+      const model = rawModel === '<synthetic>' ? null : rawModel
+      const u = entry.message.usage
+      const requestId = entry.message.id ?? entry.requestId ?? entry.uuid
+      let usage: ParsedMessage['usage'] = null
+      if (u && typeof requestId === 'string' && !countedRequests.has(requestId)) {
+        countedRequests.add(requestId)
+        usage = {
+          input: u.input_tokens ?? 0,
+          output: u.output_tokens ?? 0,
+          cacheRead: u.cache_read_input_tokens ?? 0,
+          cacheWrite: u.cache_creation_input_tokens ?? 0,
+        }
+      }
       for (const block of entry.message.content) {
         if (block?.type === 'thinking') {
-          push({ role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts })
+          push({ role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts, model, usage })
         } else if (block?.type === 'text') {
-          push({ role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts })
+          push({ role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts, model, usage })
         } else if (block?.type === 'tool_use') {
           push({
             role: 'assistant',
@@ -65,8 +82,13 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
             toolName: block.name ?? null,
             toolUseId: block.id ?? null,
             timestamp: ts,
+            model,
+            usage,
           })
+        } else {
+          continue
         }
+        usage = null // only the first stored block of a response carries its usage
       }
     } else if (entry.type === 'system') {
       push({

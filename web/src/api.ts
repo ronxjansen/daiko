@@ -29,6 +29,14 @@ export interface Session {
   started_at: string | null
   ended_at: string | null
   message_count: number
+  model: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
+  /** Derived server-side; null when the transcript reported no usage / unknown model. */
+  total_tokens: number | null
+  estimated_cost_usd: number | null
   created_at: string
   updated_at: string
   preview?: string | null
@@ -43,6 +51,23 @@ export interface SessionMessage {
   tool_name: string | null
   tool_use_id: string | null
   timestamp: string | null
+  model: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
+  /** Derived server-side for the API request this message heads; null when untracked. */
+  estimated_cost_usd: number | null
+}
+
+export function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
+export function formatCost(usd: number): string {
+  return usd >= 0.01 || usd === 0 ? `$${usd.toFixed(2)}` : '<$0.01'
 }
 
 export interface SessionList {

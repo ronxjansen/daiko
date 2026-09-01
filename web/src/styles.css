@@ -905,3 +905,32 @@ a.stat-card:hover .stat-label {
 .msg-toggle {
   margin-top: 8px;
 }
+
+/* ---------- Session usage ---------- */
+
+.stat-grid-usage {
+  grid-template-columns: repeat(6, 1fr);
+  margin-bottom: 40px;
+}
+
+.stat-grid-usage .stat-value {
+  font-size: 22px;
+}
+
+.msg-usage {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .stat-grid-usage {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .stat-grid-usage {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

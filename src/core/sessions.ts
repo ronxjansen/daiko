@@ -4,9 +4,33 @@ import os from 'node:os'
 import type { Kysely } from 'kysely'
 import type { DB } from '../db/schema.js'
 import { harnessById, sessionHarnesses } from './harnesses/index.js'
-import type { ParsedSession } from './harnesses/types.js'
+import type { ParsedSession, TokenUsage } from './harnesses/types.js'
 
 const now = () => new Date().toISOString()
+
+/**
+ * Session-level model + token totals. Prefers the parser's session-wide figures
+ * (Codex reports only cumulative usage); otherwise sums per-message usage and
+ * takes the last per-message model. Null (not zero) when nothing was reported.
+ */
+function sessionRollup(parsed: ParsedSession): { model: string | null; usage: TokenUsage | null } {
+  let model = parsed.model ?? null
+  let usage = parsed.usage ?? null
+  if (!usage) {
+    for (const m of parsed.messages) {
+      if (!m.usage) continue
+      usage ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+      usage.input += m.usage.input
+      usage.output += m.usage.output
+      usage.cacheRead += m.usage.cacheRead
+      usage.cacheWrite += m.usage.cacheWrite
+    }
+  }
+  if (!model) {
+    for (const m of parsed.messages) model = m.model ?? model
+  }
+  return { model, usage }
+}
 
 export interface SessionSource {
   harness: string
@@ -64,6 +88,7 @@ export async function importSessionFile(
   if (!parsed) return 'skipped'
 
   const sessionId = existing?.id ?? randomUUID()
+  const rollup = sessionRollup(parsed)
   const sessionRow = {
     harness: parsed.harness,
     external_id: parsed.externalId,
@@ -75,6 +100,11 @@ export async function importSessionFile(
     message_count: parsed.messages.length,
     source_size: stat.size,
     source_mtime_ms: Math.floor(stat.mtimeMs),
+    model: rollup.model,
+    input_tokens: rollup.usage?.input ?? null,
+    output_tokens: rollup.usage?.output ?? null,
+    cache_read_tokens: rollup.usage?.cacheRead ?? null,
+    cache_write_tokens: rollup.usage?.cacheWrite ?? null,
     updated_at: now(),
   }
 
@@ -100,6 +130,11 @@ export async function importSessionFile(
       tool_name: m.toolName,
       tool_use_id: m.toolUseId,
       timestamp: m.timestamp,
+      model: m.model ?? null,
+      input_tokens: m.usage?.input ?? null,
+      output_tokens: m.usage?.output ?? null,
+      cache_read_tokens: m.usage?.cacheRead ?? null,
+      cache_write_tokens: m.usage?.cacheWrite ?? null,
     }))
     for (let i = 0; i < rows.length; i += 50) {
       await trx.insertInto('messages').values(rows.slice(i, i + 50)).execute()
