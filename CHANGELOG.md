@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/ronxjansen/daiko/compare/daiko-v0.1.1...daiko-v0.1.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* store entire skill directories ([ae5b033](https://github.com/ronxjansen/daiko/commit/ae5b033c3c4bab4b1ac740efdef2afd50315492a))
+* store entire skill directories ([14cab63](https://github.com/ronxjansen/daiko/commit/14cab6396e2cc7fd0d01eb02cc4cb0caa695016f))
+
 ## [0.1.1](https://github.com/ronxjansen/daiko/compare/daiko-v0.1.0...daiko-v0.1.1) (2026-09-01)
 
 
