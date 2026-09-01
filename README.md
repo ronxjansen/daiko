@@ -50,3 +50,10 @@ dai webui -d      # same, but as a background daemon (logs: ~/.daiko/webui.log)
 dai webui status  # show whether the daemon is running
 dai webui stop    # stop the background daemon
 ```
+
+## Roadmap
+- create insights in costs
+- personal backup service
+- hosted, multi-user offering
+- at model switcher to save costs using a smart prompt based model router
+- at policies
