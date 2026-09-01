@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, harnessLabel, type SessionMessage } from '../api'
+import { api, formatCost, formatTokens, harnessLabel, type SessionMessage } from '../api'
 import { shortenPath } from './Sessions'
 
 const PAGE_SIZE = 300
@@ -52,6 +52,7 @@ export function SessionDetail() {
                 </>
               )}{' '}
               · {meta.message_count} messages
+              {meta.model && <> · <span className="mono">{meta.model}</span></>}
               {meta.started_at && <> · {new Date(meta.started_at).toLocaleString()}</>}
             </p>
           </div>
@@ -69,6 +70,21 @@ export function SessionDetail() {
         </div>
       </header>
 
+      {meta.total_tokens !== null && (
+        <div className="stat-grid stat-grid-usage">
+          <Stat label="Total tokens" value={formatTokens(meta.total_tokens)} />
+          <Stat label="Input" value={formatTokens(meta.input_tokens ?? 0)} />
+          <Stat label="Output" value={formatTokens(meta.output_tokens ?? 0)} />
+          <Stat label="Cache read" value={formatTokens(meta.cache_read_tokens ?? 0)} />
+          <Stat label="Cache write" value={formatTokens(meta.cache_write_tokens ?? 0)} />
+          <Stat
+            label="Est. cost"
+            value={meta.estimated_cost_usd !== null ? formatCost(meta.estimated_cost_usd) : '–'}
+            title={meta.estimated_cost_usd === null ? 'No pricing known for this model' : 'API list-price estimate'}
+          />
+        </div>
+      )}
+
       <section className="panel transcript">
         {messages.map((m) => (
           <MessageRow key={m.id} m={m} />
@@ -81,6 +97,15 @@ export function SessionDetail() {
           </div>
         )}
       </section>
+    </div>
+  )
+}
+
+function Stat({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="stat-card" title={title}>
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
     </div>
   )
 }
@@ -111,6 +136,7 @@ function MessageRow({ m }: { m: SessionMessage }) {
         {m.timestamp && (
           <span className="muted mono msg-time">{new Date(m.timestamp).toLocaleTimeString()}</span>
         )}
+        <MessageUsage m={m} />
       </div>
       <pre className="msg-body">
         {shown}
@@ -122,6 +148,29 @@ function MessageRow({ m }: { m: SessionMessage }) {
         </button>
       )}
     </div>
+  )
+}
+
+/**
+ * Token badge for the API request this message heads. Usage is recorded on one
+ * message per request (the first stored block of the response), so the badge
+ * covers that whole model turn, not the single bubble.
+ */
+function MessageUsage({ m }: { m: SessionMessage }) {
+  if (m.input_tokens === null) return null
+  const total = m.input_tokens + (m.output_tokens ?? 0) + (m.cache_read_tokens ?? 0) + (m.cache_write_tokens ?? 0)
+  const breakdown = [
+    `in ${formatTokens(m.input_tokens)}`,
+    `out ${formatTokens(m.output_tokens ?? 0)}`,
+    `cache read ${formatTokens(m.cache_read_tokens ?? 0)}`,
+    `cache write ${formatTokens(m.cache_write_tokens ?? 0)}`,
+    ...(m.model ? [m.model] : []),
+  ].join(' · ')
+  return (
+    <span className="muted mono msg-usage" title={breakdown}>
+      {formatTokens(total)} tok
+      {m.estimated_cost_usd !== null && ` · ${formatCost(m.estimated_cost_usd)}`}
+    </span>
   )
 }
 

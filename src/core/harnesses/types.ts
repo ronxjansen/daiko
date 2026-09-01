@@ -1,5 +1,19 @@
 import type { ArtifactType, MessageKind, MessageRole } from '../../db/schema.js'
 
+/**
+ * Normalized token counts for one API request (or one whole session).
+ * `input` is always the NON-cached share of the prompt: harnesses whose raw
+ * counts fold cached tokens into the input figure (Codex, Gemini) subtract
+ * them during parsing, so cost is uniformly
+ * input·rate + cacheRead·readRate + cacheWrite·writeRate + output·outRate.
+ */
+export interface TokenUsage {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+}
+
 export interface ParsedMessage {
   role: MessageRole
   kind: MessageKind
@@ -7,7 +21,10 @@ export interface ParsedMessage {
   toolName: string | null
   toolUseId: string | null
   timestamp: string | null
-  raw: string
+  /** Model that produced this message, when the transcript records it. */
+  model?: string | null
+  /** Tokens for the API request that produced this message; set on at most one message per request. */
+  usage?: TokenUsage | null
 }
 
 export interface ParsedSession {
@@ -19,6 +36,9 @@ export interface ParsedSession {
   startedAt: string | null
   endedAt: string | null
   messages: ParsedMessage[]
+  /** Session-wide model/usage for harnesses that only report per-session totals (Codex); otherwise derived from messages. */
+  model?: string | null
+  usage?: TokenUsage | null
 }
 
 export interface ScannedArtifact {

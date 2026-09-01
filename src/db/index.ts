@@ -56,6 +56,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   message_count INTEGER NOT NULL DEFAULT 0,
   source_size INTEGER NOT NULL DEFAULT 0,
   source_mtime_ms INTEGER NOT NULL DEFAULT 0,
+  model TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cache_read_tokens INTEGER,
+  cache_write_tokens INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -69,7 +74,11 @@ CREATE TABLE IF NOT EXISTS messages (
   tool_name TEXT,
   tool_use_id TEXT,
   timestamp TEXT,
-  raw TEXT NOT NULL,
+  model TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cache_read_tokens INTEGER,
+  cache_write_tokens INTEGER,
   UNIQUE(session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_harness ON sessions(harness, started_at);
@@ -106,12 +115,31 @@ function migrateArtifactsNullableProjectId(sqlite: SQLite.Database): void {
   sqlite.pragma('foreign_keys = ON')
 }
 
+/** Drop the messages.raw column from older DBs: it duplicated every transcript and nothing read it. */
+function migrateDropMessagesRaw(sqlite: SQLite.Database): void {
+  const columns = sqlite.pragma(`table_info('messages')`) as Array<{ name: string }>
+  if (columns.some((c) => c.name === 'raw')) sqlite.exec('ALTER TABLE messages DROP COLUMN raw')
+}
+
+/** Add model + token-usage columns to sessions/messages in DBs created before usage tracking. */
+function migrateAddUsageColumns(sqlite: SQLite.Database): void {
+  const usageColumns = ['model TEXT', 'input_tokens INTEGER', 'output_tokens INTEGER', 'cache_read_tokens INTEGER', 'cache_write_tokens INTEGER']
+  for (const table of ['sessions', 'messages']) {
+    const existing = new Set((sqlite.pragma(`table_info('${table}')`) as Array<{ name: string }>).map((c) => c.name))
+    for (const column of usageColumns) {
+      if (!existing.has(column.split(' ')[0])) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)
+    }
+  }
+}
+
 export function openDb(dbPath: string): Kysely<DB> {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
   const sqlite = new SQLite(dbPath)
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
   migrateArtifactsNullableProjectId(sqlite)
+  migrateDropMessagesRaw(sqlite)
   sqlite.exec(DDL)
+  migrateAddUsageColumns(sqlite)
   return new Kysely<DB>({ dialect: new SqliteDialect({ database: sqlite }) })
 }

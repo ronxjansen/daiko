@@ -18,6 +18,8 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
   let cwd: string | null = null
   let startedAt: string | null = null
   let endedAt: string | null = null
+  let model: string | null = null
+  let totalUsage: ParsedSession['usage'] = null
   const messages: ParsedMessage[] = []
 
   for (const entry of entries) {
@@ -32,9 +34,27 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
       cwd = entry.payload.cwd ?? null
       continue
     }
+    if (entry.type === 'turn_context' && typeof entry.payload?.model === 'string') {
+      model = entry.payload.model
+      continue
+    }
+    // Codex only reports usage per turn, and token_count events repeat within a
+    // turn (summing last_token_usage overcounts) — keep the cumulative snapshot,
+    // whose input_tokens figure includes the cached share.
+    if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+      const t = entry.payload.info?.total_token_usage
+      if (t) {
+        totalUsage = {
+          input: Math.max(0, (t.input_tokens ?? 0) - (t.cached_input_tokens ?? 0)),
+          output: t.output_tokens ?? 0,
+          cacheRead: t.cached_input_tokens ?? 0,
+          cacheWrite: t.cache_write_input_tokens ?? 0,
+        }
+      }
+      continue
+    }
     if (entry.type !== 'response_item' || !entry.payload) continue
     const p = entry.payload
-    const raw = JSON.stringify(entry)
 
     if (p.type === 'message') {
       const role: MessageRole = p.role === 'assistant' ? 'assistant' : p.role === 'user' ? 'user' : 'system'
@@ -45,12 +65,11 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
         toolName: null,
         toolUseId: null,
         timestamp: ts,
-        raw,
       })
     } else if (p.type === 'reasoning') {
       // Codex encrypts raw reasoning; the readable part is the summary blocks.
       const summary = Array.isArray(p.summary) ? p.summary.map((s: any) => s?.text ?? '').filter(Boolean).join('\n') : ''
-      messages.push({ role: 'assistant', kind: 'thinking', content: summary, toolName: null, toolUseId: null, timestamp: ts, raw })
+      messages.push({ role: 'assistant', kind: 'thinking', content: summary, toolName: null, toolUseId: null, timestamp: ts })
     } else if (p.type === 'function_call' || p.type === 'custom_tool_call' || p.type === 'web_search_call') {
       messages.push({
         role: 'assistant',
@@ -59,7 +78,6 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
         toolName: p.name ?? p.type,
         toolUseId: p.call_id ?? p.id ?? null,
         timestamp: ts,
-        raw,
       })
     } else if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
       messages.push({
@@ -69,7 +87,6 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
         toolName: null,
         toolUseId: p.call_id ?? null,
         timestamp: ts,
-        raw,
       })
     }
   }
@@ -84,6 +101,8 @@ export function parseCodexTranscript(file: string): ParsedSession | null {
     startedAt,
     endedAt,
     messages,
+    model,
+    usage: totalUsage,
   }
 }
 

@@ -18,10 +18,10 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
   let startedAt: string | null = null
   let endedAt: string | null = null
   const messages: ParsedMessage[] = []
-
-  const push = (msg: Omit<ParsedMessage, 'raw'>, entry: Record<string, any>) => {
-    messages.push({ ...msg, raw: JSON.stringify(entry) })
-  }
+  const push = (msg: ParsedMessage) => messages.push(msg)
+  // One API response spans multiple JSONL lines (one per content block), each
+  // repeating the same message.usage — attach it only once per response id.
+  const countedRequests = new Set<string>()
 
   for (const entry of entries) {
     cwd ??= typeof entry.cwd === 'string' ? entry.cwd : null
@@ -37,67 +37,68 @@ export function parseClaudeTranscript(file: string): ParsedSession | null {
     if (entry.type === 'user' && entry.message) {
       const content = entry.message.content
       if (typeof content === 'string') {
-        push({ role: 'user', kind: 'text', content, toolName: null, toolUseId: null, timestamp: ts }, entry)
+        push({ role: 'user', kind: 'text', content, toolName: null, toolUseId: null, timestamp: ts })
       } else if (Array.isArray(content)) {
         for (const block of content) {
           if (block?.type === 'tool_result') {
-            push(
-              {
-                role: 'tool',
-                kind: 'tool_result',
-                content: flattenContent(block.content),
-                toolName: null,
-                toolUseId: block.tool_use_id ?? null,
-                timestamp: ts,
-              },
-              entry,
-            )
+            push({
+              role: 'tool',
+              kind: 'tool_result',
+              content: flattenContent(block.content),
+              toolName: null,
+              toolUseId: block.tool_use_id ?? null,
+              timestamp: ts,
+            })
           } else if (block?.type === 'text' || typeof block === 'string') {
-            push(
-              { role: 'user', kind: 'text', content: flattenContent([block]), toolName: null, toolUseId: null, timestamp: ts },
-              entry,
-            )
+            push({ role: 'user', kind: 'text', content: flattenContent([block]), toolName: null, toolUseId: null, timestamp: ts })
           }
         }
       }
     } else if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
-      for (const block of entry.message.content) {
-        if (block?.type === 'thinking') {
-          push(
-            { role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts },
-            entry,
-          )
-        } else if (block?.type === 'text') {
-          push(
-            { role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts },
-            entry,
-          )
-        } else if (block?.type === 'tool_use') {
-          push(
-            {
-              role: 'assistant',
-              kind: 'tool_use',
-              content: JSON.stringify(block.input ?? {}),
-              toolName: block.name ?? null,
-              toolUseId: block.id ?? null,
-              timestamp: ts,
-            },
-            entry,
-          )
+      const rawModel = typeof entry.message.model === 'string' ? entry.message.model : null
+      const model = rawModel === '<synthetic>' ? null : rawModel
+      const u = entry.message.usage
+      const requestId = entry.message.id ?? entry.requestId ?? entry.uuid
+      let usage: ParsedMessage['usage'] = null
+      if (u && typeof requestId === 'string' && !countedRequests.has(requestId)) {
+        countedRequests.add(requestId)
+        usage = {
+          input: u.input_tokens ?? 0,
+          output: u.output_tokens ?? 0,
+          cacheRead: u.cache_read_input_tokens ?? 0,
+          cacheWrite: u.cache_creation_input_tokens ?? 0,
         }
       }
+      for (const block of entry.message.content) {
+        if (block?.type === 'thinking') {
+          push({ role: 'assistant', kind: 'thinking', content: block.thinking ?? '', toolName: null, toolUseId: null, timestamp: ts, model, usage })
+        } else if (block?.type === 'text') {
+          push({ role: 'assistant', kind: 'text', content: block.text ?? '', toolName: null, toolUseId: null, timestamp: ts, model, usage })
+        } else if (block?.type === 'tool_use') {
+          push({
+            role: 'assistant',
+            kind: 'tool_use',
+            content: JSON.stringify(block.input ?? {}),
+            toolName: block.name ?? null,
+            toolUseId: block.id ?? null,
+            timestamp: ts,
+            model,
+            usage,
+          })
+        } else {
+          continue
+        }
+        usage = null // only the first stored block of a response carries its usage
+      }
     } else if (entry.type === 'system') {
-      push(
-        {
-          role: 'system',
-          kind: 'system',
-          content: typeof entry.content === 'string' ? entry.content : entry.subtype ?? null,
-          toolName: null,
-          toolUseId: null,
-          timestamp: ts,
-        },
-        entry,
-      )
+      push({
+        role: 'system',
+        kind: 'system',
+        content: typeof entry.content === 'string' ? entry.content : entry.subtype ?? null,
+        toolName: null,
+        toolUseId: null,
+        timestamp: ts,
+      })
     }
   }
 
