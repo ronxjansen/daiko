@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Developers who work with multiple AI coding agents (Claude Code, Codex, Cursor) across many repositories. They accumulate skills, MCP server configs, and agent instruction files (CLAUDE.md, AGENTS.md, .cursorrules) and need them consistent across projects and machines. They are terminal-comfortable, self-hosting inclined, and treat their agent config as real infrastructure worth versioning. The webui user is the same person, sitting at their own machine, browsing `http://localhost:4680` served by `dai webui`.
+Developers who work with multiple AI coding agents (Claude Code, Codex, Cursor, Gemini, Pi, Amp, OpenCode) across many repositories. They accumulate skills, MCP server configs, and agent instruction files (CLAUDE.md, AGENTS.md, .cursorrules, etc) and need them consistent across projects and machines. They are terminal-comfortable, self-hosting inclined, and treat their agent config as real infrastructure worth versioning. The webui user is the same person, sitting at their own machine, browsing `http://localhost:4680` served by `dai webui`.
 
 ## Product Purpose
 
@@ -16,7 +16,7 @@ Daiko syncs MCP servers, skills, and agent files across agents and projects. Eve
 
 ## Positioning
 
-Harness-agnostic, versioned, self-hosted, secure. Unlike a git repo per config set (manual cross-repo sync), Obsidian Sync (no versioning), or symlinks (break across machines, can't pin), Daiko stores everything in one local SQLite database (`~/.daiko/daiko.db`) with git-like content-addressed versioning per artifact.
+Harness-agnostic, versioned, self-hosted, secure. Unlike a git repo per config set (manual cross-repo sync), Obsidian Sync (no versioning), or symlinks (break across machines, can't pin), Daiko stores everything in one SQLite database (`~/.daiko/daiko.db`) with git-like content-addressed versioning per artifact.
 
 ## Operating Context
 
@@ -44,5 +44,4 @@ README.md at repo root documents features, workflow, and the "Why not X?" positi
 
 - Provenance is the product: versions, hashes, pins, and history deserve first-class visual treatment, like inspecting a ledger of immutable versions.
 - Local-first calm: self-hosted, one SQLite file, no cloud — the tool should feel quiet, trustworthy, and utilitarian, never SaaS-flashy.
-- The webui is the CLI's visual twin: it complements terminal workflow and references CLI commands in its empty states.
 - Content is sacred: the tool never mutates silently; every edit is a new version, sync is explicit.
