@@ -4,9 +4,10 @@ export interface Stats {
   projects: number
   skills: number
   mcp_servers: number
-  agent_files: number
   versions: number
   sessions: number
+  /** All-time token volume across every imported session, cache traffic included. */
+  total_tokens: number
 }
 
 /** Harness id from the server-side registry; the list of known ids comes from /api/harnesses. */

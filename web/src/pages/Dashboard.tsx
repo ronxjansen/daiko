@@ -25,10 +25,14 @@ export function Dashboard() {
       )}
 
       <div className="stat-grid">
+        <StatCard
+          label="Tokens"
+          value={stats.data && formatTokens(stats.data.total_tokens)}
+          title={stats.data && `${stats.data.total_tokens.toLocaleString()} tokens across all sessions`}
+        />
         <StatCard label="Projects" value={stats.data?.projects} to="/projects" />
         <StatCard label="Skills" value={stats.data?.skills} to="/skills" />
         <StatCard label="MCP Servers" value={stats.data?.mcp_servers} to="/mcp" />
-        <StatCard label="Agent Files" value={stats.data?.agent_files} />
         <StatCard label="Versions" value={stats.data?.versions} />
         <StatCard label="Sessions" value={stats.data?.sessions} to="/sessions" />
       </div>
@@ -366,7 +370,17 @@ function SessionHeatmap() {
   )
 }
 
-function StatCard({ label, value, to }: { label: string; value: number | undefined; to?: string }) {
+function StatCard({
+  label,
+  value,
+  to,
+  title,
+}: {
+  label: string
+  value: number | string | undefined
+  to?: string
+  title?: string
+}) {
   const inner = (
     <>
       <div className="stat-value">{value ?? '–'}</div>
@@ -374,10 +388,12 @@ function StatCard({ label, value, to }: { label: string; value: number | undefin
     </>
   )
   return to ? (
-    <Link to={to} className="stat-card stat-link">
+    <Link to={to} className="stat-card stat-link" title={title}>
       {inner}
     </Link>
   ) : (
-    <div className="stat-card">{inner}</div>
+    <div className="stat-card" title={title}>
+      {inner}
+    </div>
   )
 }

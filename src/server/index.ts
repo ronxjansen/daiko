@@ -83,20 +83,29 @@ export function createApp(db: Kysely<DB>): Hono {
   )
 
   app.get('/api/stats', async (c) => {
-    const [projects, artifacts, versions, sessions] = await Promise.all([
+    const [projects, artifacts, versions, sessions, tokens] = await Promise.all([
       db.selectFrom('projects').select(db.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
       db.selectFrom('artifacts').select(['type', db.fn.countAll<number>().as('n')]).groupBy('type').execute(),
       db.selectFrom('versions').select(db.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
       db.selectFrom('sessions').select(db.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
+      db
+        .selectFrom('sessions')
+        .select(({ fn }) => [
+          fn.sum<number | null>('input_tokens').as('input'),
+          fn.sum<number | null>('output_tokens').as('output'),
+          fn.sum<number | null>('cache_read_tokens').as('cache_read'),
+          fn.sum<number | null>('cache_write_tokens').as('cache_write'),
+        ])
+        .executeTakeFirstOrThrow(),
     ])
     const byType = Object.fromEntries(artifacts.map((r) => [r.type, r.n]))
     return c.json({
       projects: projects.n,
       skills: byType.skill ?? 0,
       mcp_servers: byType.mcp_server ?? 0,
-      agent_files: byType.agent_md ?? 0,
       versions: versions.n,
       sessions: sessions.n,
+      total_tokens: (tokens.input ?? 0) + (tokens.output ?? 0) + (tokens.cache_read ?? 0) + (tokens.cache_write ?? 0),
     })
   })
 
