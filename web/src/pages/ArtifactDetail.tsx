@@ -71,6 +71,14 @@ export function ArtifactDetail() {
   })
 
   if (artifact.isLoading) return <p className="muted">Loading…</p>
+  if (artifact.isError)
+    return (
+      <p className="empty">
+        <span>
+          Couldn't reach the server. Restart <code>dai webui</code> and reload.
+        </span>
+      </p>
+    )
   if (!artifact.data) return <p className="muted">Artifact not found.</p>
 
   const a = artifact.data

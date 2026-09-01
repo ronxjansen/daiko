@@ -343,6 +343,13 @@ export function createApp(db: Kysely<DB>): Hono {
     })
   })
 
+  // Start timestamps only; the dashboard heatmap buckets them client-side so
+  // day/hour reflect the viewer's local timezone, not the server's.
+  app.get('/api/sessions/starts', async (c) => {
+    const rows = await db.selectFrom('sessions').select('started_at').where('started_at', 'is not', null).execute()
+    return c.json(rows.map((r) => r.started_at))
+  })
+
   app.get('/api/sessions/:id', async (c) => {
     const session = await db.selectFrom('sessions').selectAll().where('id', '=', c.req.param('id')).executeTakeFirst()
     if (!session) return c.json({ error: 'not found' }, 404)

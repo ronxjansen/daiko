@@ -11,6 +11,14 @@ export function ArtifactList({ type, title }: { type: ArtifactType; title: strin
         <h1>{title}</h1>
       </header>
 
+      {artifacts.isError && (
+        <p className="empty">
+          <span>
+            Couldn't reach the server. Restart <code>dai webui</code> and reload.
+          </span>
+        </p>
+      )}
+
       {artifacts.data?.length === 0 && (
         <p className="empty">
           <span>

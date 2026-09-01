@@ -66,6 +66,14 @@ export function ProjectDetail() {
   })
 
   if (project.isLoading) return <p className="muted">Loading…</p>
+  if (project.isError)
+    return (
+      <p className="empty">
+        <span>
+          Couldn't reach the server. Restart <code>dai webui</code> and reload.
+        </span>
+      </p>
+    )
   if (!project.data) return <p className="muted">Project not found.</p>
 
   const p = project.data

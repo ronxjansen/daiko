@@ -46,6 +46,14 @@ export function Sessions() {
         </div>
       </header>
 
+      {sessions.isError && (
+        <p className="empty">
+          <span>
+            Couldn't reach the server. Restart <code>dai webui</code> and reload.
+          </span>
+        </p>
+      )}
+
       {sessions.data?.sessions.length === 0 && (
         <p className="empty">
           <span>

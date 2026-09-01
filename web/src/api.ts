@@ -211,6 +211,7 @@ export const api = {
     const qs = params.toString()
     return request<SessionList>(`/api/sessions${qs ? `?${qs}` : ''}`)
   },
+  sessionStarts: () => request<string[]>('/api/sessions/starts'),
   session: (id: string, opts: { limit?: number; offset?: number } = {}) => {
     const params = new URLSearchParams()
     if (opts.limit) params.set('limit', String(opts.limit))
