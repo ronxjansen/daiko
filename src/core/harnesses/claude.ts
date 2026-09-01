@@ -1,8 +1,7 @@
-import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { HarnessAdapter, ParsedMessage, ParsedSession, ScannedArtifact } from './types.js'
-import { flattenContent, isDir, mcpServerArtifacts, readJson, readJsonl, removeMcpServerFromJsonFile, safeReaddir, scanAgentFile, scanMcpJson } from './util.js'
+import type { HarnessAdapter, ParsedMessage, ParsedSession } from './types.js'
+import { flattenContent, isDir, mcpServerArtifacts, readJson, readJsonl, removeMcpServerFromJsonFile, safeReaddir } from './util.js'
 
 /**
  * Parse a Claude Code transcript (~/.claude/projects/<slug>/<session>.jsonl).
@@ -139,7 +138,7 @@ function claudeLocalServers(root: string): Record<string, unknown> {
 export const claude: HarnessAdapter = {
   id: 'claude',
   label: 'Claude Code',
-  projectMcpConfigPath: '.mcp.json',
+  layout: { agentFile: 'CLAUDE.md', skillsDir: '.claude/skills', mcpConfig: '.mcp.json' },
 
   // ~/.claude/projects/<project-slug>/<session-uuid>.jsonl
   discoverSessionFiles(home) {
@@ -157,40 +156,12 @@ export const claude: HarnessAdapter = {
 
   parseSession: parseClaudeTranscript,
 
-  scanProjectArtifacts(root) {
-    const out: ScannedArtifact[] = []
-
-    const agentMd = scanAgentFile(root, 'CLAUDE.md', 'claude')
-    if (agentMd) out.push(agentMd)
-
-    const skillsDir = path.join(root, '.claude', 'skills')
-    if (fs.existsSync(skillsDir)) {
-      for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue
-        const skillMd = path.join(skillsDir, entry.name, 'SKILL.md')
-        if (fs.existsSync(skillMd)) {
-          out.push({
-            type: 'skill',
-            name: entry.name,
-            relPath: path.posix.join('.claude', 'skills', entry.name, 'SKILL.md'),
-            harness: 'claude',
-            content: fs.readFileSync(skillMd, 'utf8'),
-          })
-        }
-      }
-    }
-
-    out.push(...scanMcpJson(path.join(root, '.mcp.json'), '.mcp.json', 'claude'))
-
-    // Claude Code "local" scope servers live in ~/.claude.json keyed by the directory the
-    // session was launched from, which may be the repo root or an ancestor/descendant of it.
-    // Synced back as .mcp.json entries, which promotes them to shareable project scope.
-    const claimed = new Set(out.filter((a) => a.type === 'mcp_server').map((a) => a.name))
-    for (const a of mcpServerArtifacts('claude', '.mcp.json', claudeLocalServers(root))) {
-      if (!claimed.has(a.name)) out.push(a)
-    }
-
-    return out
+  // Claude Code "local" scope servers live in ~/.claude.json keyed by the directory the
+  // session was launched from, which may be the repo root or an ancestor/descendant of it.
+  // They are outside the declared layout, so they are scanned here; sync writes them to
+  // whichever project MCP config the artifact targets, which promotes them to shareable scope.
+  scanExtraProjectArtifacts(root) {
+    return mcpServerArtifacts('claude', '~/.claude.json', claudeLocalServers(root))
   },
 
   scanGlobalArtifacts(home) {

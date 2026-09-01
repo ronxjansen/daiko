@@ -140,6 +140,9 @@ function removeTomlServerLines(text: string, name: string): string {
 export const codex: HarnessAdapter = {
   id: 'codex',
   label: 'Codex',
+  // Codex reads AGENTS.md and has no project-level MCP config: its servers live in
+  // ~/.codex/config.toml only, so it cannot host a project MCP target.
+  layout: { agentFile: 'AGENTS.md', skillsDir: '.codex/skills' },
 
   // ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
   discoverSessionFiles(home) {

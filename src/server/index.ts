@@ -7,8 +7,20 @@ import { Hono } from 'hono'
 import type { Kysely } from 'kysely'
 import type { DB } from '../db/schema.js'
 import { HARNESSES } from '../core/harnesses/index.js'
+import { harnessesSupporting, renderPaths, supportMatrix } from '../core/render.js'
 import { estimateCostUsd } from '../core/pricing.js'
-import { attachArtifact, deleteArtifact, detachArtifact, hashOf, syncProject } from '../core/store.js'
+import {
+  attachArtifact,
+  deleteArtifact,
+  detachArtifact,
+  hashOf,
+  parseSkillFiles,
+  serializeSkillFiles,
+  setTargets,
+  syncProject,
+  targetsFor,
+  targetsOf,
+} from '../core/store.js'
 
 const now = () => new Date().toISOString()
 
@@ -53,8 +65,21 @@ function webDistDir(): string {
 export function createApp(db: Kysely<DB>): Hono {
   const app = new Hono()
 
+  // The honest support matrix: what each harness can host, derived from its declared layout.
   app.get('/api/harnesses', (c) =>
-    c.json(HARNESSES.map((h) => ({ id: h.id, label: h.label, sessions: Boolean(h.parseSession) }))),
+    c.json({
+      harnesses: HARNESSES.map((h) => ({
+        id: h.id,
+        label: h.label,
+        sessions: Boolean(h.parseSession),
+        hosts: {
+          skill: Boolean(h.layout?.skillsDir),
+          agent_md: Boolean(h.layout?.agentFile),
+          mcp_server: Boolean(h.layout?.mcpConfig),
+        },
+      })),
+      supports: supportMatrix(),
+    }),
   )
 
   app.get('/api/stats', async (c) => {
@@ -132,10 +157,22 @@ export function createApp(db: Kysely<DB>): Hono {
       .selectFrom('artifacts')
       .selectAll()
       .where('project_id', 'is', null)
-      .orderBy('harness')
+      .orderBy('type')
       .orderBy('name')
       .execute()
-    return c.json({ ...project, artifacts, linked_artifacts: linkedArtifacts, global_artifacts: globalArtifacts })
+    const all = [...artifacts, ...linkedArtifacts, ...globalArtifacts]
+    const targets = await targetsFor(db, all.map((a) => a.id))
+    const withTargets = <T extends { id: string; type: 'skill' | 'mcp_server' | 'agent_md'; name: string; origin_harness: string }>(rows: T[]) =>
+      rows.map((a) => {
+        const to = targets.get(a.id) ?? [a.origin_harness]
+        return { ...a, targets: to, rendered_paths: renderPaths(a, to) }
+      })
+    return c.json({
+      ...project,
+      artifacts: withTargets(artifacts),
+      linked_artifacts: withTargets(linkedArtifacts),
+      global_artifacts: withTargets(globalArtifacts),
+    })
   })
 
   app.post('/api/projects/:id/artifacts', async (c) => {
@@ -162,7 +199,7 @@ export function createApp(db: Kysely<DB>): Hono {
     const project = await db.selectFrom('projects').selectAll().where('id', '=', c.req.param('id')).executeTakeFirst()
     if (!project) return c.json({ error: 'not found' }, 404)
     if (!fs.existsSync(project.root_path)) return c.json({ error: `path missing: ${project.root_path}` }, 400)
-    const summary = await syncProject(db, project.root_path)
+    const summary = await syncProject(db, project.root_path, { force: c.req.query('force') === 'true' })
     return c.json(summary)
   })
 
@@ -194,7 +231,13 @@ export function createApp(db: Kysely<DB>): Hono {
       .groupBy('artifact_id')
       .execute()
     const countMap = new Map(counts.map((r) => [r.artifact_id, r.n]))
-    return c.json(artifacts.map((a) => ({ ...a, version_count: countMap.get(a.id) ?? 0 })))
+    const targets = await targetsFor(db, artifacts.map((a) => a.id))
+    return c.json(
+      artifacts.map((a) => {
+        const to = targets.get(a.id) ?? [a.origin_harness]
+        return { ...a, version_count: countMap.get(a.id) ?? 0, targets: to, rendered_paths: renderPaths(a, to) }
+      }),
+    )
   })
 
   app.get('/api/artifacts/:id', async (c) => {
@@ -223,7 +266,63 @@ export function createApp(db: Kysely<DB>): Hono {
       .where('project_artifacts.artifact_id', '=', artifact.id)
       .orderBy('projects.name')
       .execute()
-    return c.json({ ...artifact, versions, content: current?.content ?? '', attached_projects: attachedProjects })
+    // Bundled skill files are listed by path only; contents come from /file (they can be binary).
+    const files = parseSkillFiles(current?.files ?? null).map((f) => ({
+      path: f.path,
+      encoding: f.encoding,
+      exec: Boolean(f.exec),
+      size: Buffer.byteLength(f.content, f.encoding),
+    }))
+    const targets = await targetsOf(db, artifact.id)
+    const effective = targets.length > 0 ? targets : [artifact.origin_harness]
+    return c.json({
+      ...artifact,
+      versions,
+      content: current?.content ?? '',
+      files,
+      attached_projects: attachedProjects,
+      targets: effective,
+      // Where this one canonical artifact lands, and which harnesses could hold it at all.
+      rendered_paths: renderPaths(artifact, effective),
+      available_targets: harnessesSupporting(artifact.type),
+    })
+  })
+
+  /** Set which harnesses an artifact is rendered into. */
+  app.put('/api/artifacts/:id/targets', async (c) => {
+    const artifact = await db.selectFrom('artifacts').selectAll().where('id', '=', c.req.param('id')).executeTakeFirst()
+    if (!artifact) return c.json({ error: 'not found' }, 404)
+    const body = await c.req.json<{ targets?: unknown }>()
+    if (!Array.isArray(body.targets) || body.targets.some((h) => typeof h !== 'string')) {
+      return c.json({ error: 'targets must be an array of harness ids' }, 400)
+    }
+    const supported = harnessesSupporting(artifact.type)
+    const unable = (body.targets as string[]).filter((h) => !supported.includes(h))
+    if (unable.length > 0) {
+      return c.json({ error: `${unable.join(', ')} cannot hold a ${artifact.type}` }, 400)
+    }
+    const saved = await setTargets(db, artifact.id, body.targets as string[])
+    return c.json({ ok: true, targets: saved, rendered_paths: renderPaths(artifact, saved) })
+  })
+
+  /** One bundled file of a skill, from the shown version by default. */
+  app.get('/api/artifacts/:id/file', async (c) => {
+    const filePath = c.req.query('path')
+    if (!filePath) return c.json({ error: 'path required' }, 400)
+    const artifact = await db.selectFrom('artifacts').selectAll().where('id', '=', c.req.param('id')).executeTakeFirst()
+    if (!artifact) return c.json({ error: 'not found' }, 404)
+    const versionId = c.req.query('version_id') ?? artifact.pinned_version_id ?? artifact.current_version_id
+    if (!versionId) return c.json({ error: 'not found' }, 404)
+    const version = await db
+      .selectFrom('versions')
+      .selectAll()
+      .where('id', '=', versionId)
+      .where('artifact_id', '=', artifact.id)
+      .executeTakeFirst()
+    if (!version) return c.json({ error: 'version not found' }, 404)
+    const file = parseSkillFiles(version.files).find((f) => f.path === filePath)
+    if (!file) return c.json({ error: 'file not found' }, 404)
+    return c.json(file)
   })
 
   app.get('/api/artifacts/:id/versions/:versionId', async (c) => {
@@ -240,17 +339,29 @@ export function createApp(db: Kysely<DB>): Hono {
   app.put('/api/artifacts/:id', async (c) => {
     const artifact = await db.selectFrom('artifacts').selectAll().where('id', '=', c.req.param('id')).executeTakeFirst()
     if (!artifact) return c.json({ error: 'not found' }, 404)
-    const body = await c.req.json<{ content?: string }>()
+    // Without `path` this edits the artifact's own file; with it, one bundled file of a skill.
+    const body = await c.req.json<{ content?: string; path?: string }>()
     if (typeof body.content !== 'string') return c.json({ error: 'content required' }, 400)
-    const hash = hashOf(body.content)
     const current = artifact.current_version_id
       ? await db.selectFrom('versions').selectAll().where('id', '=', artifact.current_version_id).executeTakeFirst()
       : undefined
-    if (current && current.hash === hash) return c.json({ ok: true, unchanged: true })
+    let content = current?.content ?? ''
+    let files = parseSkillFiles(current?.files ?? null)
+    if (body.path) {
+      const existing = files.find((f) => f.path === body.path)
+      if (!existing) return c.json({ error: 'file not found' }, 404)
+      if (existing.encoding !== 'utf8') return c.json({ error: 'binary files cannot be edited' }, 400)
+      files = files.map((f) => (f.path === body.path ? { ...f, content: body.content as string } : f))
+    } else {
+      content = body.content
+    }
+    const hash = hashOf(content)
+    const serialized = serializeSkillFiles(files)
+    if (current && current.hash === hash && current.files === serialized) return c.json({ ok: true, unchanged: true })
     const versionId = randomUUID()
     await db
       .insertInto('versions')
-      .values({ id: versionId, artifact_id: artifact.id, hash, content: body.content, source: 'webui', created_at: now() })
+      .values({ id: versionId, artifact_id: artifact.id, hash, content, files: serialized, source: 'webui', created_at: now() })
       .execute()
     await db.updateTable('artifacts').set({ current_version_id: versionId, updated_at: now() }).where('id', '=', artifact.id).execute()
     return c.json({ ok: true, version_id: versionId })
@@ -291,7 +402,15 @@ export function createApp(db: Kysely<DB>): Hono {
     const versionId = randomUUID()
     await db
       .insertInto('versions')
-      .values({ id: versionId, artifact_id: artifact.id, hash: version.hash, content: version.content, source: 'restore', created_at: now() })
+      .values({
+        id: versionId,
+        artifact_id: artifact.id,
+        hash: version.hash,
+        content: version.content,
+        files: version.files,
+        source: 'restore',
+        created_at: now(),
+      })
       .execute()
     await db.updateTable('artifacts').set({ current_version_id: versionId, updated_at: now() }).where('id', '=', artifact.id).execute()
     return c.json({ ok: true, version_id: versionId })

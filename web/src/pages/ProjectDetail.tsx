@@ -1,15 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, timeAgo, TYPE_LABELS, type ArtifactType } from '../api'
+import { api, timeAgo, TYPE_LABELS, type ArtifactType, type SyncResult, type SyncSkip } from '../api'
 
 const TYPE_ORDER: ArtifactType[] = ['skill', 'mcp_server', 'agent_md']
+
+const describeSkip = (skip: SyncSkip) =>
+  skip.reason === 'unreadable' ? `${skip.relPath} (not valid JSON)` : `${skip.relPath} (${skip.artifact})`
+
+/** Sync never overwrites unrecorded local edits, so the result has to say what it left behind. */
+function syncMessage(result: SyncResult): string {
+  const changes = [
+    result.written.length > 0 && `Synced ${result.written.length} file(s): ${result.written.join(', ')}`,
+    result.removed.length > 0 && `Removed ${result.removed.length} file(s) dropped upstream: ${result.removed.join(', ')}`,
+  ].filter(Boolean) as string[]
+  if (result.skipped.length === 0) return changes.length === 0 ? 'Already up to date.' : changes.join(' ')
+  const wrote = changes.length === 0 ? 'Nothing written.' : changes.join(' ')
+  return `${wrote} Kept local edits in ${result.skipped.map(describeSkip).join(', ')} — add them to the store, or overwrite them.`
+}
 
 export function ProjectDetail() {
   const { projectId } = useParams({ from: '/projects/$projectId' })
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [conflicts, setConflicts] = useState<SyncSkip[]>([])
 
   const [search, setSearch] = useState('')
 
@@ -28,33 +43,29 @@ export function ProjectDetail() {
   const attach = useMutation({
     mutationFn: (artifactId: string) => api.attachArtifact(projectId, artifactId),
     onSuccess: (result) => {
-      setSyncMessage(
-        result.written.length === 0
-          ? 'Added. Already up to date on disk.'
-          : `Added and synced: ${result.written.join(', ')}`,
-      )
+      setConflicts(result.skipped)
+      setNotice(`Added. ${syncMessage(result)}`)
       invalidate()
     },
-    onError: (err: Error) => setSyncMessage(`Add failed: ${err.message}`),
+    onError: (err: Error) => setNotice(`Add failed: ${err.message}`),
   })
 
   const detach = useMutation({
     mutationFn: (artifactId: string) => api.detachArtifact(projectId, artifactId),
     onSuccess: (result) => {
-      setSyncMessage(result.removed.length === 0 ? 'Removed.' : `Removed from disk: ${result.removed.join(', ')}`)
+      setNotice(result.removed.length === 0 ? 'Removed.' : `Removed from disk: ${result.removed.join(', ')}`)
       invalidate()
     },
-    onError: (err: Error) => setSyncMessage(`Remove failed: ${err.message}`),
+    onError: (err: Error) => setNotice(`Remove failed: ${err.message}`),
   })
 
   const sync = useMutation({
-    mutationFn: () => api.syncProject(projectId),
+    mutationFn: (force: boolean) => api.syncProject(projectId, force),
     onSuccess: (result) => {
-      setSyncMessage(
-        result.written.length === 0 ? 'Already up to date.' : `Synced ${result.written.length} file(s): ${result.written.join(', ')}`,
-      )
+      setConflicts(result.skipped)
+      setNotice(syncMessage(result))
     },
-    onError: (err: Error) => setSyncMessage(`Sync failed: ${err.message}`),
+    onError: (err: Error) => setNotice(`Sync failed: ${err.message}`),
   })
 
   const remove = useMutation({
@@ -90,9 +101,21 @@ export function ProjectDetail() {
             <p className="muted mono">{p.root_path}</p>
           </div>
           <div className="button-row">
-            <button className="btn" onClick={() => sync.mutate()} disabled={sync.isPending}>
+            <button className="btn" onClick={() => sync.mutate(false)} disabled={sync.isPending}>
               {sync.isPending ? 'Syncing…' : 'Sync to disk'}
             </button>
+            {conflicts.length > 0 && (
+              <button
+                className="btn btn-danger"
+                disabled={sync.isPending}
+                onClick={() => {
+                  const files = conflicts.map(describeSkip).join('\n')
+                  if (confirm(`Replace these local edits with the stored version?\n\n${files}`)) sync.mutate(true)
+                }}
+              >
+                Overwrite local edits
+              </button>
+            )}
             <button
               className="btn btn-danger"
               onClick={() => {
@@ -103,7 +126,7 @@ export function ProjectDetail() {
             </button>
           </div>
         </div>
-        {syncMessage && <p className="notice">{syncMessage}</p>}
+        {notice && <p className={conflicts.length > 0 ? 'notice notice-warn' : 'notice'}>{notice}</p>}
       </header>
 
       {TYPE_ORDER.map((type) => {
@@ -118,7 +141,7 @@ export function ProjectDetail() {
                   <Link to="/artifacts/$artifactId" params={{ artifactId: a.id }}>
                     <span className="artifact-name">{a.name}</span>
                     {a.pinned_version_id && <span className="pin-badge">pinned</span>}
-                    <span className="muted mono">{a.rel_path}</span>
+                    <span className="muted mono">{a.rendered_paths.map((r) => r.relPath).join('  ')}</span>
                     <span className="muted">{timeAgo(a.updated_at)}</span>
                   </Link>
                 </li>
@@ -166,7 +189,7 @@ export function ProjectDetail() {
                 <Link to="/artifacts/$artifactId" params={{ artifactId: a.id }}>
                   <span className={`badge badge-${a.type}`}>{TYPE_LABELS[a.type]}</span>
                   <span className="artifact-name">{a.name}</span>
-                  <span className="muted">{a.project_name ?? `global (${a.harness})`}</span>
+                  <span className="muted">{a.project_name ?? 'global'}</span>
                 </Link>
                 <button className="btn btn-small" onClick={() => attach.mutate(a.id)} disabled={attach.isPending}>
                   Add
@@ -188,8 +211,8 @@ export function ProjectDetail() {
                 <Link to="/artifacts/$artifactId" params={{ artifactId: a.id }}>
                   <span className="artifact-name">{a.name}</span>
                   {a.pinned_version_id && <span className="pin-badge">pinned</span>}
-                  <span className="muted mono">{a.rel_path}</span>
-                  <span className="muted">{a.harness}</span>
+                  <span className="muted mono">{a.rendered_paths.map((r) => r.relPath).join('  ')}</span>
+                  <span className="muted">{a.targets.join(', ')}</span>
                 </Link>
               </li>
             ))}

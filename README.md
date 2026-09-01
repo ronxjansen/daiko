@@ -13,7 +13,8 @@ dai webui --daemon  # start the web app (http://localhost:4680)
 
 ## Features
 - sync MCP servers, skills and AGENT.md files, including global harness configurations
-- works with any agent harness, including Claude Code, Codex, Cursor, Pi and OpenCode
+- one stored artifact per skill, instruction doc or MCP server — rendered into every harness you target
+- skills are stored whole: SKILL.md plus its scripts, references and binary assets, executable bits included
 - each skill or MCP configuration is versioned
 - share any skill or MCP server into any other repo
 - pin any skill or MCP server to a specific version
@@ -24,6 +25,39 @@ dai webui --daemon  # start the web app (http://localhost:4680)
 Daiko registers hooks into any indentified agent harness. Using these hooks it:
 a) syncs skills and MCP configuration each new session, automatically. 
 b) captures the agent session transcript
+
+## One artifact, many harnesses
+
+A skill is a skill whether it sits in `.claude/skills`, `.codex/skills` or `.agents/skills`;
+your project instructions are one document whether the file is called `CLAUDE.md`, `AGENTS.md`
+or `GEMINI.md`. Daiko stores each of those once, with a single version history, and *renders*
+it into the layout of every harness you target:
+
+```bash
+dai target my-skill                          # show targets and the files they produce
+dai target my-skill claude codex cursor      # deploy it to three harnesses
+dai target my-skill --all                    # ...or every harness that can hold it
+dai sync .                                   # write it into all of them
+```
+
+Scanning fills the targets in for you: find the same skill in `.claude/skills` and
+`.codex/skills` and it becomes one artifact deployed to both. Scanning only ever adds targets —
+to stop deploying somewhere, say so with `dai target`, or sync will just write the file back. Edit either copy and the change
+propagates to the rest on the next sync. Edit *both* differently and Daiko refuses to guess:
+it keeps the stored version and tells you which copies disagree.
+
+### What each harness can hold
+
+| Harness | Instructions | Skills | MCP servers |
+| --- | --- | --- | --- |
+| Claude Code | `CLAUDE.md` | `.claude/skills` | `.mcp.json` |
+| Codex | `AGENTS.md` | `.codex/skills` | — (global `~/.codex/config.toml` only) |
+| Cursor | `.cursorrules` | `.cursor/skills` | `.cursor/mcp.json` |
+| Gemini | `GEMINI.md` | — | — |
+| Generic | `AGENTS.md` | `.agents/skills` | — |
+
+A dash means Daiko has nowhere to put that artifact type for that harness. It says so when
+you sync rather than writing it into some other harness's config file.
 
 ## Why not X?
 - Github or symlinks do not allow for granular configurations; when using a single Git repo or symlinked directory either a MCP server or skills is configured or not. In my experience you want some projects to use some of the MCP configurations.
@@ -37,11 +71,15 @@ npm i -g daiko
 dai init          # initialize the global store (~/.daiko)
 dai add .         # upload all skills, MCP servers, agent files for the repo (uses repo dir name as project name)
 dai sync          # write skills, MCP servers and agent files from the central store back into the repo
+                  # (local edits that were never added are reported and left alone)
+dai sync --force  # ... and overwrite those local edits with the stored version
 dai search <q>    # search all stored skills, MCP servers, and agent files by name
 dai attach <name> # share a stored skill/MCP server into this repo and write it to disk
+dai target <name> [harnesses...]  # show or set which harnesses an artifact is rendered into
 dai detach <name> # remove a shared skill/MCP server from this repo (unlink + delete from disk)
-dai hook          # install Claude Code hooks: auto "dai sync" on session start + full transcript capture
-dai hook -g       # same, globally (~/.claude/settings.json): every new session in a registered repo auto-syncs
+dai hook          # install hooks for every detected harness (Claude Code, Codex, Cursor, Gemini): auto "dai sync" on session start + transcript capture
+dai hook -g       # same, globally (~/.claude, ~/.codex, ~/.cursor, ~/.gemini): every new session in a registered repo auto-syncs
+dai hook --harness codex  # limit to specific harnesses
 dai import        # import locally stored sessions from Claude Code, Codex, and Gemini CLI
 dai sessions      # list captured sessions
 dai list          # list registered projects and artifacts

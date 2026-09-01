@@ -570,6 +570,12 @@ a.stat-card:hover .stat-label {
   width: 100%;
 }
 
+/* Sync kept a local edit: the notice is a decision to make, not a receipt. */
+.notice-warn {
+  border-color: var(--reg-red);
+  background: var(--red-tint);
+}
+
 /* ---------- Empty states ---------- */
 
 .empty {
@@ -981,12 +987,16 @@ a.stat-card:hover .stat-label {
 }
 
 /* Harness identity rides in the label text; badges stay in the neutral
-   ledger voice so the seal keeps sole-accent duty and red stays destructive. */
-.badge-harness-claude,
-.badge-harness-codex,
-.badge-harness-gemini {
+   ledger voice so the seal keeps sole-accent duty and red stays destructive.
+   Matched by prefix so a new harness in the registry needs no CSS. */
+[class*='badge-harness-'] {
   border-color: var(--rule);
   color: var(--ink-soft);
+}
+
+/* An artifact renders into several harnesses, so its badges sit in a row. */
+[class*='badge-harness-'] + [class*='badge-harness-'] {
+  margin-left: 4px;
 }
 
 .pager {
@@ -1107,4 +1117,43 @@ a.stat-card:hover .stat-label {
   .stat-grid-usage {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ---------- Skill files ---------- */
+
+/* A skill ships a whole directory; its files sit above the content they belong to. */
+.file-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.file-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--hairline);
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.file-tab:hover {
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.file-tab.selected {
+  color: var(--ink);
+  border-color: var(--seal-ink);
+  background: var(--seal);
+}
+
+.file-tab-flag {
+  margin-left: 7px;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
