@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { openDb } from '../db/index.js'
-import { daikoHome, dbPath, ensureHome, readConfig, writeConfig, DEFAULT_PORT } from '../core/paths.js'
+import { daikoHome, dbPath, ensureHome, readConfig } from '../core/paths.js'
 import {
   addGlobalMcpServers,
   addProject,
@@ -25,6 +25,7 @@ import { HARNESSES, harnessById, sessionHarnesses } from '../core/harnesses/inde
 import { harnessesSupporting, renderPaths } from '../core/render.js'
 import { importAllSessions, importSessionFile } from '../core/sessions.js'
 import { detectHookHarnesses, hookHarnessIds, installHooks } from './hook.js'
+import { runInit } from './init.js'
 import { startServer } from '../server/index.js'
 
 /**
@@ -49,15 +50,15 @@ program.name('dai').description('Daiko: sync MCP servers, skills, and agent file
 
 program
   .command('init')
-  .description('Initialize the global Daiko store (~/.daiko)')
-  .option('-p, --port <port>', 'web UI port', String(DEFAULT_PORT))
-  .action(async (opts: { port: string }) => {
-    ensureHome()
-    writeConfig({ port: Number(opts.port) || DEFAULT_PORT })
-    const db = openDb(dbPath())
-    await db.destroy()
-    console.log(`Initialized Daiko store at ${daikoHome()}`)
-  })
+  .description('Onboard this machine: detect harnesses, import all sessions, discover + scan every repo they were used in, optionally install hooks')
+  .option('-p, --port <port>', 'web UI port')
+  .option('-y, --yes', 'accept the defaults for every step without prompting')
+  .option('--harness <harnesses...>', `limit onboarding to these harnesses: ${HARNESSES.filter((h) => h.globalConfigDir).map((h) => h.id).join(' | ')}`)
+  .option('--repos <paths...>', 'only onboard these repos instead of the discovered set')
+  .option('--no-sessions', 'skip the transcript import')
+  .option('--no-scan', 'skip scanning repos for skills, MCP servers, and agent files')
+  .option('--hooks <mode>', 'install hooks without asking: global | repo | none')
+  .action(runInit)
 
 program
   .command('add [path]')

@@ -117,6 +117,14 @@ export interface HarnessAdapter {
   id: string
   /** Human-readable name shown in the CLI and web UI. */
   label: string
+  /** Global config dir under $HOME, e.g. '.claude'. Its presence is the "installed on this machine" signal. */
+  globalConfigDir?: string
+  /**
+   * Absolute roots of every project this harness has been used in, read from its own global
+   * state (config project maps, workspace storage) — never from walking the disk. Paths may
+   * be stale or point below a repo root; core discovery (src/core/discover.ts) cleans that up.
+   */
+  discoverProjects?(home: string): string[]
   /** Where this harness keeps project config. Drives scanning and rendering alike; omit for session-only harnesses. */
   layout?: HarnessLayout
   /** Absolute paths of session transcript files in this harness's local store. */

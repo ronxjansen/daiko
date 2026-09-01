@@ -140,9 +140,23 @@ function removeTomlServerLines(text: string, name: string): string {
 export const codex: HarnessAdapter = {
   id: 'codex',
   label: 'Codex',
+  globalConfigDir: '.codex',
   // Codex reads AGENTS.md and has no project-level MCP config: its servers live in
   // ~/.codex/config.toml only, so it cannot host a project MCP target.
   layout: { agentFile: 'AGENTS.md', skillsDir: '.codex/skills' },
+
+  // ~/.codex/config.toml records every trusted root as a [projects."<path>"] table.
+  discoverProjects(home) {
+    const file = path.join(home, '.codex', 'config.toml')
+    if (!fs.existsSync(file)) return []
+    try {
+      const parsed = parseToml(fs.readFileSync(file, 'utf8'))
+      return Object.keys((parsed.projects ?? {}) as Record<string, unknown>)
+    } catch {
+      // invalid TOML: skip file
+      return []
+    }
+  },
 
   // ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
   discoverSessionFiles(home) {

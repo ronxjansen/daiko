@@ -68,7 +68,11 @@ you sync rather than writing it into some other harness's config file.
 
 ```bash
 npm i -g daiko
-dai init          # initialize the global store (~/.daiko)
+dai init          # onboard this machine: detect installed harnesses, import all sessions, discover every
+                  # repo they were used in (from harness global state — no disk crawl), scan + upload each
+                  # repo's config, and optionally install hooks. Interactive with sensible defaults; rerun-safe.
+dai init -y       # same, accepting the defaults (import + scan everything, no hooks)
+dai init --hooks global --no-sessions --harness claude codex  # flag-driven, for scripts
 dai add .         # upload all skills, MCP servers, agent files for the repo (uses repo dir name as project name)
 dai sync          # write skills, MCP servers and agent files from the central store back into the repo
                   # (local edits that were never added are reported and left alone)
